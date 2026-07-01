@@ -81,6 +81,7 @@ def run_pipeline(collector, cfg: dict, opts: PipelineOptions,
 
     total = len(opts.companies)
     stopped = False
+    seen_this_run: set = set()
     for i, query in enumerate(opts.companies, 1):
         if stop_check():
             yield _log("warn", "사용자 중단 - 처리분까지 저장합니다.")
@@ -90,12 +91,20 @@ def run_pipeline(collector, cfg: dict, opts: PipelineOptions,
         name = query.get("회사명", "")
         key = _key_for(query)
 
-        # 재개 시 이미 처리된 것 스킵
+        # 이미 처리된 것 스킵 - 원인에 따라 안내
         if key in state.processed_keys:
-            yield {"type": "progress", "current": i, "total": total,
-                   "name": f"{name} (이미 처리 - 스킵)"}
+            if key in seen_this_run:
+                # 같은 실행 안에서 동일 입력이 다시 등장 → 입력 중복
+                yield _log("warn", f"[{name}] 중복 입력 - 스킵 (같은 회사명|사업자번호가 이미 처리됨)")
+                yield {"type": "progress", "current": i, "total": total,
+                       "name": f"{name} (중복 입력 - 스킵)"}
+            else:
+                # 체크포인트에서 로드된 기처리분 → 재개 스킵
+                yield {"type": "progress", "current": i, "total": total,
+                       "name": f"{name} (이미 처리 - 스킵)"}
             continue
 
+        seen_this_run.add(key)
         yield {"type": "progress", "current": i, "total": total, "name": name}
 
         # 선제 재로그인

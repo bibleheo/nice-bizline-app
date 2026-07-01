@@ -13,9 +13,10 @@ def _norm(s: str) -> str:
 
 
 _HEADER_ALIASES = {
-    "회사명": {"회사명", "상호", "회사", "기업명", "companyname", "company"},
+    "회사명": {"회사명", "업체명", "상호", "회사", "기업명", "업체", "companyname", "company"},
     "사업자번호": {"사업자번호", "사업자등록번호", "사업자등록", "bizno", "businessno"},
     "대표자명": {"대표자명", "대표자", "대표", "ceo", "representative"},
+    "주소": {"주소", "소재지", "본사주소", "사업장주소", "address", "addr"},
 }
 
 

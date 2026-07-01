@@ -37,6 +37,28 @@ class TestReader:
         assert rows[0]["사업자번호"] == "1234567890"
         assert rows[0]["대표자명"] == "홍길동"
 
+    def test_upche_myeong_alias(self, tmp_path):
+        """'업체명' 도 회사명으로 인식."""
+        p = tmp_path / "in.xlsx"
+        _make_input(p, [
+            ["업체명", "사업자번호"],
+            ["가나건설", "1112233445"],
+        ])
+        rows = read_company_list(str(p))
+        assert rows[0]["회사명"] == "가나건설"
+        assert rows[0]["사업자번호"] == "1112233445"
+
+    def test_address_column_captured(self, tmp_path):
+        """'주소'(및 alias '소재지') 컬럼을 캡처해 매칭에 활용."""
+        p = tmp_path / "in.xlsx"
+        _make_input(p, [
+            ["회사명", "소재지"],
+            ["한빛엔지니어링", "서울특별시 강남구 테헤란로 1"],
+        ])
+        rows = read_company_list(str(p))
+        assert rows[0]["회사명"] == "한빛엔지니어링"
+        assert rows[0]["주소"] == "서울특별시 강남구 테헤란로 1"
+
     def test_no_header_falls_back_to_first_column(self, tmp_path):
         """헤더 인식 실패 시 1열을 회사명으로 처리."""
         p = tmp_path / "in.xlsx"

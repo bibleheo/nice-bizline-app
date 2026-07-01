@@ -89,6 +89,20 @@ def test_login_required_triggers_relogin_retry():
     assert any("세션 만료 감지" in m for _, m in logs)
 
 
+def test_duplicate_input_logs_and_skips():
+    """같은 실행 안에서 동일 회사명|사업자번호가 반복되면 경고 로그 후 1회만 처리."""
+    w, summary, logs = _run([
+        {"회사명": "삼성전자"},
+        {"회사명": "삼성전자"},
+        {"회사명": "현대자동차"},
+    ])
+    assert summary["total"] == 3
+    # 삼성전자(1회) + 현대자동차(1회) = 2건만 수집, 중복 삼성전자는 스킵
+    assert summary["success"] == 2
+    assert len(w.state.records) == 2  # 중복 삼성전자는 record에 추가되지 않음
+    assert any("중복 입력" in m for lvl, m in logs if lvl == "warn")
+
+
 def test_stop_safely_finalizes():
     """stop() 호출 후에도 finalize가 호출되어 결과를 반환."""
     cfg = _load_cfg()
