@@ -1,0 +1,70 @@
+# 나이스비즈라인 자동화 설정
+# - 사이트 DOM 구조가 변경되면 셀렉터만 여기서 수정합니다.
+# - 실제 페이지를 확인한 뒤 TODO 표시된 셀렉터를 채워야 동작합니다.
+
+site:
+  base_url: "https://www.nicebizinfo.com"
+  login_url: "https://www.nicebizinfo.com/login"      # TODO: 실제 로그인 URL 확인
+  search_url: "https://www.nicebizinfo.com/search"    # TODO: 실제 검색 URL 확인
+
+# 페이지별 CSS/XPath 셀렉터
+selectors:
+  login:
+    id_input: "input[name='userId']"        # TODO
+    pw_input: "input[name='password']"      # TODO
+    submit_btn: "button[type='submit']"     # TODO
+    logged_in_marker: ".user-name"          # 로그인 성공 시 노출되는 요소  # TODO
+  search:
+    query_input: "input[name='q']"          # TODO
+    submit_btn: "button.search-btn"         # TODO
+    result_rows: "table.result-list tr"     # 후보 1건 = 행 1개  # TODO
+    result_company_name: "td.name a"        # TODO
+    result_biz_no: "td.biz-no"              # TODO
+    result_ceo: "td.ceo"                    # TODO
+    result_address: "td.addr"               # TODO
+    result_link: "td.name a"                # 상세로 이동하는 링크  # TODO
+    # 다음 페이지 이동: a/button 셀렉터. 빈 문자열이면 페이지네이션 비활성(1페이지만)
+    next_page_btn: ""                       # TODO (예: "a.btn-next:not(.disabled)")
+  detail:
+    company_name: ".info-company-name"      # TODO
+    ceo: ".info-ceo"                        # TODO
+    biz_no: ".info-bizno"                   # TODO
+    address: ".info-address"                # TODO
+    industry: ".info-industry"              # TODO
+    founded: ".info-founded"                # TODO
+    phone: ".info-phone"                    # TODO
+    employees: ".info-employees"            # TODO
+    sales: ".finance-sales"                 # TODO (단년)
+    operating_profit: ".finance-op"         # TODO (단년)
+    net_income: ".finance-net"              # TODO (단년)
+    credit_rating: ".credit-rating"         # TODO
+    # 다년 재무표 (3개년 옵션에서 사용). 1개 row = 1개 연도
+    financial_table:
+      rows: ".finance-table tbody tr"       # TODO
+      year: "td.year"                       # TODO (예: "2025")
+      sales: "td.sales"                     # TODO
+      operating_profit: "td.op"             # TODO
+      net_income: "td.net"                  # TODO
+  login_page_markers:
+    # 세션 만료로 로그인 페이지로 튕긴 경우 감지에 사용
+    url_contains: "/login"
+    dom_marker: "input[name='password']"
+
+timing:
+  session_minutes: 10           # 절대시간 만료
+  relogin_threshold_minutes: 9  # 9분 경과 시 선제 재로그인
+  request_delay_min_sec: 1.0
+  request_delay_max_sec: 3.0
+  page_timeout_sec: 30
+  max_search_pages: 3           # 검색 결과 페이지 안전 한도 (1이면 페이지네이션 비활성)
+
+browser:
+  headless: true
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Nice-Bizline-Helper/1.0"
+
+matching:
+  # 점수 가중치 (matcher.py)
+  weight_biz_no: 100        # 일치 시 즉시 확정
+  weight_ceo: 30
+  weight_address: 20
+  accept_threshold: 25      # 단독 후보가 아닐 때 채택을 위한 최소 점수
