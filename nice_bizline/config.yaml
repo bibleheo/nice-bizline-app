@@ -20,14 +20,19 @@ selectors:
   search:
     query_input: "#search"                  # 실측: 고정 id
     submit_btn: "img[alt='검색하기']"         # 실측: 검색 아이콘
-    result_rows: "table.result-list tr"     # TODO: 결과 표의 tr (전체 행 구조 확인 필요)
-    result_company_name: "td.name a"        # TODO
-    result_biz_no: "td.biz-no"              # TODO
-    result_ceo: "td.ceo"                    # TODO
-    result_address: "td.addr"               # TODO
-    result_link: "td.name a"                # 상세로 이동하는 링크  # TODO
-    # 다음 페이지 이동: a/button 셀렉터. 빈 문자열이면 페이지네이션 비활성(1페이지만)
-    next_page_btn: ""                       # TODO (예: "a.btn-next:not(.disabled)")
+    # ⚠️ 이 표(v-data-table)의 td 클래스명은 내용과 무관(td--date에 사업자번호 등).
+    #    따라서 열 위치(nth-child)로 지정한다. 헤더 순서:
+    #    1 기업유형 / 2 기업명 / 3 사업자번호 / 4 대표자명 / 5 소재지 / 6 산업명 / 7 바로가기
+    result_rows: ".v-data-table__wrapper table tbody tr"   # 실측
+    result_company_name: "td:nth-child(2)"  # 기업명 (버튼 텍스트)
+    result_biz_no: "td:nth-child(3)"        # 사업자번호
+    result_ceo: "td:nth-child(4)"           # 대표자명
+    result_address: "td:nth-child(5)"       # 기업 소재지
+    # ⚠️ href 없음: 기업명이 <button>이라 JS 클릭 이동. collector 를 클릭 방식으로 수정 예정.
+    #    행 내 상세 진입 버튼: 7번째 칸의 '개요' 버튼
+    result_detail_btn: "td:nth-child(7) button:has-text('개요')"   # 상세('개요') 클릭 버튼
+    result_link: ""                         # (구) href 방식 미사용
+    next_page_btn: "button[aria-label='다음 페이지']:not(.v-btn--disabled)"  # 실측
   detail:
     company_name: ".info-company-name"      # TODO
     ceo: ".info-ceo"                        # TODO
