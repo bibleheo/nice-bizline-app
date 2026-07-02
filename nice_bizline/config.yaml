@@ -4,7 +4,7 @@
 
 site:
   base_url: "https://www.nicebizline.com"
-  login_url: "https://www.nicebizline.com/"           # TODO: 로그인 페이지 주소창 URL 확인
+  login_url: "https://www.nicebizline.com/cm/lgn"     # 실측
   search_url: "https://www.nicebizline.com/search"    # TODO: 실제 검색 URL 확인
 
 # 페이지별 CSS/XPath 셀렉터
@@ -15,7 +15,7 @@ selectors:
     id_input: "input[type='text']"          # 실측: Vuetify 자동 id 대신 type으로 고정
     pw_input: "input[type='password']"      # 실측
     submit_btn: "button:has-text('로그인')"   # 실측: v-btn 안의 '로그인' 텍스트
-    logged_in_marker: ".user-name"          # TODO: 로그인 성공 후 노출되는 요소로 교체 필요
+    logged_in_marker: "img[alt='나의정보']"   # 실측: 로그인 후 상단 GNB에 항상 노출되는 나의정보 아이콘
   search:
     query_input: "input[name='q']"          # TODO
     submit_btn: "button.search-btn"         # TODO
@@ -49,7 +49,7 @@ selectors:
       net_income: "td.net"                  # TODO
   login_page_markers:
     # 세션 만료로 로그인 페이지로 튕긴 경우 감지에 사용
-    url_contains: "/login"                  # TODO: 실제 로그인 URL 경로 확인 후 조정
+    url_contains: "/cm/lgn"                 # 실측: 세션 만료 시 이 경로로 튕김
     dom_marker: "input[type='password']"    # 로그인 페이지에만 있는 비밀번호 입력칸
 
 timing:
