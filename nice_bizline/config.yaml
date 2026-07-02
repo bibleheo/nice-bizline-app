@@ -3,17 +3,19 @@
 # - 실제 페이지를 확인한 뒤 TODO 표시된 셀렉터를 채워야 동작합니다.
 
 site:
-  base_url: "https://www.nicebizinfo.com"
-  login_url: "https://www.nicebizinfo.com/login"      # TODO: 실제 로그인 URL 확인
-  search_url: "https://www.nicebizinfo.com/search"    # TODO: 실제 검색 URL 확인
+  base_url: "https://www.nicebizline.com"
+  login_url: "https://www.nicebizline.com/"           # TODO: 로그인 페이지 주소창 URL 확인
+  search_url: "https://www.nicebizline.com/search"    # TODO: 실제 검색 URL 확인
 
 # 페이지별 CSS/XPath 셀렉터
+# ⚠️ 이 사이트는 Vue.js(Vuetify) SPA. input의 id(input-1271 등)는 매 렌더마다
+#    자동 생성되어 불안정하므로 type/구조 기반 셀렉터를 사용한다.
 selectors:
   login:
-    id_input: "input[name='userId']"        # TODO
-    pw_input: "input[name='password']"      # TODO
-    submit_btn: "button[type='submit']"     # TODO
-    logged_in_marker: ".user-name"          # 로그인 성공 시 노출되는 요소  # TODO
+    id_input: "input[type='text']"          # 실측: Vuetify 자동 id 대신 type으로 고정
+    pw_input: "input[type='password']"      # 실측
+    submit_btn: "button:has-text('로그인')"   # 실측: v-btn 안의 '로그인' 텍스트
+    logged_in_marker: ".user-name"          # TODO: 로그인 성공 후 노출되는 요소로 교체 필요
   search:
     query_input: "input[name='q']"          # TODO
     submit_btn: "button.search-btn"         # TODO
@@ -47,8 +49,8 @@ selectors:
       net_income: "td.net"                  # TODO
   login_page_markers:
     # 세션 만료로 로그인 페이지로 튕긴 경우 감지에 사용
-    url_contains: "/login"
-    dom_marker: "input[name='password']"
+    url_contains: "/login"                  # TODO: 실제 로그인 URL 경로 확인 후 조정
+    dom_marker: "input[type='password']"    # 로그인 페이지에만 있는 비밀번호 입력칸
 
 timing:
   session_minutes: 10           # 절대시간 만료
