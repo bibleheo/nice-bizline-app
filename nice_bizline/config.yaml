@@ -33,26 +33,24 @@ selectors:
     result_detail_btn: "td:nth-child(7) button:has-text('개요')"   # 상세('개요') 클릭 버튼
     result_link: ""                         # (구) href 방식 미사용
     next_page_btn: "button[aria-label='다음 페이지']:not(.v-btn--disabled)"  # 실측
+  # 상세(개요)는 검색 결과에서 '개요' 클릭 시 같은 페이지에 인라인 렌더된다(SPA).
+  # 기본정보는 'th(라벨) → 다음 td(값)' 구조라 라벨 텍스트로 값을 찾는다.
+  # 재무는 최신 결산 1개년 KPI 카드에서 값+단위(억원/만원 등)를 읽어 백만원으로 변환.
   detail:
-    company_name: ".info-company-name"      # TODO
-    ceo: ".info-ceo"                        # TODO
-    biz_no: ".info-bizno"                   # TODO
-    address: ".info-address"                # TODO
-    industry: ".info-industry"              # TODO
-    founded: ".info-founded"                # TODO
-    phone: ".info-phone"                    # TODO
-    employees: ".info-employees"            # TODO
-    sales: ".finance-sales"                 # TODO (단년)
-    operating_profit: ".finance-op"         # TODO (단년)
-    net_income: ".finance-net"              # TODO (단년)
-    credit_rating: ".credit-rating"         # TODO
-    # 다년 재무표 (3개년 옵션에서 사용). 1개 row = 1개 연도
-    financial_table:
-      rows: ".finance-table tbody tr"       # TODO
-      year: "td.year"                       # TODO (예: "2025")
-      sales: "td.sales"                     # TODO
-      operating_profit: "td.op"             # TODO
-      net_income: "td.net"                  # TODO
+    ready_marker: ".kpi__info"              # 상세 렌더 완료 판정(재무 KPI 카드 등장)
+    settlement_text: "결산 일자"             # 결산일자 표기 텍스트(앞부분)
+    # 기본정보 표에서 뽑을 라벨(th 텍스트). 값은 바로 다음 td.
+    label_ceo: "대표자명"
+    label_employees: "종업원 수"
+    label_founded: "설립일자"
+    label_industry: "표준산업분류"           # '표준산업분류(11차)' 를 부분일치로 매칭
+    # 본사 주소: td 안 밑줄 버튼 텍스트(도로/지번/지도 버튼 텍스트는 제외)
+    address_value: ".content__inner .btn--underline .btn__content"
+    # 재무 KPI 카드 (자산/부채/자본/매출액/영업이익/당기순이익)
+    finance_card: ".nbl--section__info.kpi__info"
+    finance_label: ".section__info__label"
+    finance_value: ".section__info__value.point"
+    finance_symbol: ".symbol"
   login_page_markers:
     # 세션 만료로 로그인 페이지로 튕긴 경우 감지에 사용
     url_contains: "/cm/lgn"                 # 실측: 세션 만료 시 이 경로로 튕김

@@ -34,7 +34,9 @@ def build_headers(records: list[dict], finance_years: int = 1) -> list[str]:
         for metric in ("매출액", "영업이익", "당기순이익"):
             for y in sorted_years:
                 finance.append(f"{metric}({y})")
-    return _BASE_HEADERS_BEFORE_FINANCE + finance + _BASE_HEADERS_AFTER_FINANCE
+    # 결산일자: 재무 값이 어느 결산 기준인지 표시
+    return (_BASE_HEADERS_BEFORE_FINANCE + ["결산일자"] + finance
+            + _BASE_HEADERS_AFTER_FINANCE)
 
 
 # 단년 모드 호환용 (테스트/외부 참조)
@@ -63,7 +65,7 @@ def _header(cell, text):
 
 _COL_WIDTHS = {
     "회사명": 22, "대표자": 12, "사업자번호": 16, "주소": 32, "업종": 22,
-    "설립일": 12, "대표번호": 14, "종업원수": 10, "신용등급": 10,
+    "설립일": 12, "대표번호": 14, "종업원수": 10, "결산일자": 12, "신용등급": 10,
     "조회상태": 10, "조회일시": 18, "비고": 30,
 }
 
