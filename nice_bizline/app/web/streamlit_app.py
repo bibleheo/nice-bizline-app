@@ -73,11 +73,9 @@ def main():
         if not st.session_state.mock:
             st.warning("실제 모드는 config.yaml의 DOM 셀렉터를 실 사이트에서 추출해 채워야 동작합니다.")
 
-        st.session_state.finance_years = st.radio(
-            "재무 범위", options=[1, 3],
-            format_func=lambda n: f"최근 {n}개년",
-            horizontal=True,
-        )
+        # 실사이트는 최신 결산 1개년만 제공 → 1개년 고정
+        st.session_state.finance_years = 1
+        st.caption("재무 범위: 최신 결산 1개년 (사이트 제공 기준)")
 
     # ─── 입력 파일 ───
     st.subheader("① 입력 파일")

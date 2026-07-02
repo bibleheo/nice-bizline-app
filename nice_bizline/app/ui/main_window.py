@@ -91,12 +91,11 @@ class MainWindow(tk.Tk):
         # ③ 옵션
         grp3 = ttk.LabelFrame(body, text=" ③ 옵션 ", padding=8)
         grp3.pack(fill="x", pady=4)
+        # 실사이트는 최신 결산 1개년만 제공 → 1개년 고정
         tk.Label(grp3, text="재무 범위:", bg=BG).grid(row=0, column=0, sticky="w")
         self._years_var = tk.IntVar(value=1)
-        ttk.Radiobutton(grp3, text="최근 1개년", variable=self._years_var, value=1).grid(
-            row=0, column=1, padx=8)
-        ttk.Radiobutton(grp3, text="최근 3개년", variable=self._years_var, value=3).grid(
-            row=0, column=2, padx=8)
+        tk.Label(grp3, text="최신 결산 1개년 (사이트 제공 기준)", bg=BG).grid(
+            row=0, column=1, padx=8, sticky="w")
 
         # 실행 컨트롤
         ctrl = tk.Frame(body, bg=BG)
