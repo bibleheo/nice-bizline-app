@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import os
+import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -16,10 +17,16 @@ from pathlib import Path
 import streamlit as st
 import yaml
 
-from ..core.collector import MockCollector, NiceBizlineCollector
-from ..core.pipeline import PipelineOptions, PipelineState, run_pipeline
-from ..excelio.reader import read_company_list
-from ..excelio.writer import write_results
+# streamlit run 이 이 파일을 top-level 스크립트로 실행하므로,
+# 저장소 루트를 sys.path 에 추가해 nice_bizline 패키지를 절대경로로 import.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from nice_bizline.app.core.collector import MockCollector, NiceBizlineCollector
+from nice_bizline.app.core.pipeline import PipelineOptions, PipelineState, run_pipeline
+from nice_bizline.app.excelio.reader import read_company_list
+from nice_bizline.app.excelio.writer import write_results
 
 
 CONFIG_PATH = Path(__file__).resolve().parents[2] / "config.yaml"
