@@ -68,6 +68,13 @@ def main() -> None:
             state = ev["state"]
 
     if state is not None:
+        print("\n--- 수집된 값 미리보기 ---")
+        keys = ["회사명", "사업자번호", "대표자", "주소", "업종", "설립일", "종업원수",
+                "매출액(백만원)", "영업이익(백만원)", "당기순이익(백만원)",
+                "결산일자", "조회상태", "비고"]
+        for rec in state.records:
+            print("·", "  ".join(f"{k}={rec.get(k)}" for k in keys if k in rec))
+
         outp = str(Path(inp).with_suffix("")) + "_결과.xlsx"
         write_results(
             outp, records=state.records, unfound=state.unfound,
