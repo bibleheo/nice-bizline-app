@@ -12,7 +12,7 @@ from typing import Iterator
 
 from . import checkpoint
 from .collector import CollectorError, LoginRequired
-from .matcher import pick
+from .matcher import select_matches
 from .normalizer import normalize_amount, normalize_record
 from .session import SessionManager
 
@@ -166,48 +166,67 @@ def _process_one(collector, opts, state, session, weights, query, name):
 
 def _collect(collector, opts, state, weights, query, name):
     candidates = collector.search(name)
-    match = pick(query, candidates, weights)
+    res = select_matches(query, candidates, weights)
 
-    if match.status == "none":
+    if res.dropped:
+        yield _log("info", f"[{name}] 비기업(펀드/ETF 등) {res.dropped}건 제외")
+
+    if res.status == "none":
         yield _log("warn", f"[{name}] 미발견")
-        state.unfound.append({"회사명": name, "조회상태": "미발견", "사유": "검색 결과 0건"})
-        state.records.append(_blank_row(name, "미발견"))
+        reason = "검색 결과 0건" if not candidates else "실제 기업 후보 없음(전부 펀드/ETF 등)"
+        state.unfound.append({"회사명": name, "조회상태": "미발견", "사유": reason})
+        state.records.append(_blank_row(name, "미발견", reason))
         return
 
-    if match.status == "ambiguous":
+    if res.status == "ambiguous":
         others_desc = "; ".join(
-            f"{c.get('회사명','')}/{c.get('사업자번호','')}" for c in match.others[:3]
+            f"{c.get('회사명','')}/{c.get('사업자번호','')}" for c in res.others[:5]
         )
-        yield _log("warn", f"[{name}] 후보 다수 - 확인필요")
+        yield _log("warn", f"[{name}] 상호 정확 일치 없음 - 확인필요 ({len(res.others)}건 후보)")
         state.ambiguous.append({
             "회사명": name,
-            "채택후보": (match.candidate or {}).get("회사명", ""),
+            "채택후보": "",
             "다른후보들": others_desc,
-            "사유": f"점수 {match.score} - 임계치 미달",
+            "사유": "상호가 정확히 일치하는 후보 없음",
         })
-        try:
-            detail = collector.fetch_detail(match.candidate, opts.finance_years)
-            rec = normalize_record(detail)
-            rec.update(_finance_columns(rec, opts.finance_years))
-            rec["조회상태"] = "확인필요"
-            rec["조회일시"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            rec["비고"] = f"동명 후보 {1 + len(match.others)}건"
-            state.records.append(rec)
-        except CollectorError:
-            state.records.append(_blank_row(name, "확인필요", "상세 파싱 실패"))
+        state.records.append(_blank_row(name, "확인필요", "상호 정확 일치 후보 없음"))
         return
 
-    # auto / unique
-    detail = collector.fetch_detail(match.candidate, opts.finance_years)
-    rec = normalize_record(detail)
-    rec.update(_finance_columns(rec, opts.finance_years))
-    rec["조회상태"] = "성공"
-    rec["조회일시"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    missing = [k for k in ("매출액", "영업이익", "당기순이익", "신용등급")
-               if rec.get(k) in (None, "")]
-    rec["비고"] = f"권한없음/미제공: {', '.join(missing)}" if missing else ""
-    state.records.append(rec)
-    yield _log("info", f"[{rec.get('회사명', name)}] 수집 완료")
+    # biz / single / multiple → 채택된 후보를 전부 상세 수집
+    picks = res.picks
+    total_picks = len(picks)
+    if total_picks > 1:
+        yield _log("info", f"[{name}] 동명 회사 {total_picks}건 - 전부 수집")
+
+    # LoginRequired 재시도 시 부분 중복을 막기 위해 로컬에 모은 뒤 일괄 반영
+    new_records: list[dict] = []
+    for idx, cand in enumerate(picks, 1):
+        try:
+            detail = collector.fetch_detail(cand, opts.finance_years)
+        except LoginRequired:
+            raise  # 아직 state에 반영 전 → 재로그인 후 처음부터 안전하게 재시도
+        except CollectorError as e:
+            new_records.append(_blank_row(
+                cand.get("회사명") or name, "성공", f"상세 파싱 실패: {e}"))
+            continue
+        rec = normalize_record(detail)
+        rec.update(_finance_columns(rec, opts.finance_years))
+        rec["조회상태"] = "성공"
+        rec["조회일시"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        missing = [k for k in ("매출액", "영업이익", "당기순이익", "신용등급")
+                   if rec.get(k) in (None, "")]
+        notes = []
+        if total_picks > 1:
+            notes.append(f"동명 {total_picks}건 중 {idx}")
+        if missing:
+            notes.append(f"권한없음/미제공: {', '.join(missing)}")
+        rec["비고"] = " / ".join(notes)
+        new_records.append(rec)
+
+    state.records.extend(new_records)
+    for idx, rec in enumerate(new_records, 1):
+        suffix = f" ({idx}/{total_picks})" if total_picks > 1 else ""
+        yield _log("info", f"[{rec.get('회사명', name)}] 수집 완료{suffix}")
 
 
 def _finalize(state, opts, session, stopped, collector):

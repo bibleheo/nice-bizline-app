@@ -1,4 +1,4 @@
-from nice_bizline.app.core.matcher import pick
+from nice_bizline.app.core.matcher import pick, select_matches, _norm_company
 
 WEIGHTS = {
     "weight_biz_no": 100,
@@ -61,6 +61,47 @@ def test_below_threshold_returns_ambiguous():
     # 최상위 후보 + 나머지가 others에 채워짐
     assert r.candidate is not None
     assert len(r.others) >= 1
+
+
+def test_norm_company_strips_corp_forms_but_keeps_syllables():
+    assert _norm_company("삼성전자(주)") == _norm_company("삼성전자")
+    assert _norm_company("주식회사 가나") == _norm_company("가나")
+    # 단독 음절 '주'는 법인격 표기가 아니므로 유지
+    assert _norm_company("주성엔지니어링") == "주성엔지니어링"
+
+
+def test_select_matches_drops_non_company():
+    r = select_matches({"회사명": "가나"}, [
+        {"회사명": "가나(주)", "사업자번호": "111-11-11111"},
+        {"회사명": "가나펀드", "사업자번호": "-"},
+    ], WEIGHTS)
+    assert r.dropped == 1
+    assert r.status == "single"
+    assert len(r.picks) == 1
+
+
+def test_select_matches_multiple_same_name():
+    r = select_matches({"회사명": "동명"}, [
+        {"회사명": "동명(주)", "사업자번호": "111-11-11111"},
+        {"회사명": "동명(주)", "사업자번호": "222-22-22222"},
+    ], WEIGHTS)
+    assert r.status == "multiple"
+    assert len(r.picks) == 2
+
+
+def test_select_matches_biz_number_confirms():
+    r = select_matches({"회사명": "동명", "사업자번호": "222-22-22222"}, [
+        {"회사명": "동명(주)", "사업자번호": "111-11-11111"},
+        {"회사명": "동명(주)", "사업자번호": "222-22-22222"},
+    ], WEIGHTS)
+    assert r.status == "biz"
+    assert r.picks[0]["사업자번호"] == "222-22-22222"
+
+
+def test_select_matches_none_when_all_noise():
+    r = select_matches({"회사명": "X"},
+                       [{"회사명": "X펀드", "사업자번호": "-"}], WEIGHTS)
+    assert r.status == "none"
 
 
 def test_ambiguous_when_top_ties_second():
