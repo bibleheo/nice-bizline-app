@@ -100,9 +100,11 @@ class NiceBizlineCollector:
 
         검색 URL 경로 토큰이 세션마다 바뀔 수 있으므로, 현재 페이지에 검색창이
         있으면 그대로 쓰고, 없으면 search_url → base_url 순으로 이동해 확보한다.
+        입력 상호의 (주)/주식회사 등 법인격 표기는 검색 정확도를 위해 제거한다.
         """
         sel = self._cfg["selectors"]["search"]
         q = sel["query_input"]
+        company_name = _search_term(company_name) or company_name
         if not self._search_box_ready(q):
             for url in (self._cfg["site"].get("search_url"),
                         self._cfg["site"].get("base_url")):
@@ -258,6 +260,17 @@ def _text(el, css: str) -> str | None:
 
 def _digits(s) -> str:
     return re.sub(r"\D", "", s or "")
+
+
+# 검색어에서 법인격 표기만 제거(핵심 상호로 검색해 적중률↑). 공백은 유지.
+_SEARCH_STRIP = re.compile(
+    r"㈜|\(\s*(?:주|유|재|사)\s*\)"
+    r"|주식회사|유한회사|유한책임회사|합자회사|합명회사|재단법인|사단법인|의료법인|학교법인")
+
+
+def _search_term(name) -> str:
+    s = _SEARCH_STRIP.sub(" ", name or "")
+    return re.sub(r"\s+", " ", s).strip()
 
 
 # 이름 비교용 정규화(법인격 표기·기호 제거). matcher._norm_company와 동일 취지.
