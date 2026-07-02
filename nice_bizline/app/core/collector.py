@@ -96,24 +96,43 @@ class NiceBizlineCollector:
         return out
 
     def _open_search(self, company_name: str) -> None:
-        """검색 페이지로 이동해 회사명을 입력하고 검색을 실행."""
+        """검색창을 확보한 뒤 회사명을 입력하고 검색을 실행.
+
+        검색 URL 경로 토큰이 세션마다 바뀔 수 있으므로, 현재 페이지에 검색창이
+        있으면 그대로 쓰고, 없으면 search_url → base_url 순으로 이동해 확보한다.
+        """
         sel = self._cfg["selectors"]["search"]
-        self._page.goto(self._cfg["site"]["search_url"])
-        if self.is_login_page():
-            raise LoginRequired()
-        self._page.wait_for_selector(sel["query_input"])
-        self._page.fill(sel["query_input"], company_name)
+        q = sel["query_input"]
+        if not self._search_box_ready(q):
+            for url in (self._cfg["site"].get("search_url"),
+                        self._cfg["site"].get("base_url")):
+                if not url:
+                    continue
+                self._page.goto(url)
+                if self.is_login_page():
+                    raise LoginRequired()
+                if self._search_box_ready(q):
+                    break
+        if not self._search_box_ready(q):
+            raise CollectorError("검색창을 찾지 못함")
+
+        self._page.fill(q, company_name)
         # SPA 검색 실행: 검색 아이콘 클릭 우선, 실패 시 Enter
-        clicked = False
         btn = self._page.query_selector(sel.get("submit_btn") or "")
         if btn:
             try:
                 btn.click()
-                clicked = True
+                return
             except Exception:
-                clicked = False
-        if not clicked:
-            self._page.press(sel["query_input"], "Enter")
+                pass
+        self._page.press(q, "Enter")
+
+    def _search_box_ready(self, selector: str, timeout: int = 3000) -> bool:
+        try:
+            self._page.wait_for_selector(selector, timeout=timeout, state="visible")
+            return True
+        except Exception:
+            return False
 
     def _each_result_row(self, sel):
         """결과 표의 행을 페이지네이션 한도까지 순회하며 yield."""
