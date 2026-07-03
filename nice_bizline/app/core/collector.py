@@ -151,6 +151,7 @@ class NiceBizlineCollector:
                 "사업자번호": _text(row, sel["result_biz_no"]),
                 "대표자명": _text(row, sel["result_ceo"]),
                 "주소": _text(row, sel["result_address"]),
+                "업종": _text(row, sel.get("result_industry") or ""),
             })
         return out
 
@@ -221,8 +222,29 @@ class NiceBizlineCollector:
     # 상세는 검색 결과에서 '개요' 클릭 시 같은 페이지에 인라인 렌더된다(href 없음).
     def fetch_detail(self, candidate: dict, finance_years: int = 1) -> dict:
         self._delay()
-        self._open_detail(candidate)
-        return self._parse_detail(candidate)
+        # 검색 결과 행에 이미 있는 기본정보로 시작 → 상세 진입이 실패해도 이건 확보.
+        base = {
+            "회사명": candidate.get("회사명"),
+            "사업자번호": candidate.get("사업자번호"),
+            "대표자": candidate.get("대표자명"),
+            "주소": candidate.get("주소"),
+            "업종": candidate.get("업종"),
+            "설립일": None, "대표번호": None, "종업원수": None,
+            "매출액": None, "영업이익": None, "당기순이익": None,
+            "신용등급": None, "결산일자": None,
+        }
+        try:
+            self._open_detail(candidate)
+            detail = self._parse_detail(candidate)
+        except LoginRequired:
+            raise
+        except CollectorError:
+            return base   # 상세 실패해도 기본정보는 반환
+        # 상세에서 얻은 값으로 보강(빈 값은 base 유지)
+        for k, v in detail.items():
+            if v not in (None, ""):
+                base[k] = v
+        return base
 
     def _open_detail(self, candidate: dict) -> None:
         sel = self._cfg["selectors"]["search"]

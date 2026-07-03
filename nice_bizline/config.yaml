@@ -28,6 +28,7 @@ selectors:
     result_biz_no: "td:nth-child(3)"        # 사업자번호
     result_ceo: "td:nth-child(4)"           # 대표자명
     result_address: "td:nth-child(5)"       # 기업 소재지
+    result_industry: "td:nth-child(6)"      # 산업명(업종)
     # ⚠️ href 없음: 기업명이 <button>이라 JS 클릭 이동. collector 를 클릭 방식으로 수정 예정.
     #    행 내 상세 진입 버튼: 7번째 칸의 '개요' 버튼
     result_detail_btn: "td:nth-child(7) button:has-text('개요')"   # 상세('개요') 클릭 버튼
