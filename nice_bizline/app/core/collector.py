@@ -284,11 +284,14 @@ class NiceBizlineCollector:
                     continue
                 if (target_biz and rb == target_biz) or (not target_biz and rn == target_name):
                     btn = row.locator(sel["result_detail_btn"]).first
+                    pages_before = len(self._context.pages)
                     btn.click(timeout=5000)
+                    self._adopt_new_page(pages_before)
                     # Vue 핸들러가 늦게 붙어 클릭이 씹히는 경우 → 1회 재클릭
                     if not self._detail_ready(dsel, timeout=6000):
                         try:
                             btn.click(timeout=3000)
+                            self._adopt_new_page(pages_before)
                         except Exception:
                             pass
                     self._wait_detail_loaded(dsel)
@@ -304,6 +307,18 @@ class NiceBizlineCollector:
             except Exception:
                 break
         raise CollectorError("상세 진입 대상 행을 찾지 못함")
+
+    def _adopt_new_page(self, pages_before: int) -> None:
+        """클릭이 새 탭을 열었으면 그 탭으로 작업 대상을 전환."""
+        try:
+            self._page.wait_for_timeout(1200)   # 새 탭이 열릴 시간
+            pages = self._context.pages
+            if len(pages) > pages_before:
+                self._page = pages[-1]
+                self._page.set_default_timeout(
+                    int(self._cfg["timing"].get("page_timeout_sec", 30)) * 1000)
+        except Exception:
+            pass
 
     def _detail_ready(self, dsel: dict, timeout: int = 6000) -> bool:
         try:

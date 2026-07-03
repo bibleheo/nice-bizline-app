@@ -29,9 +29,9 @@ selectors:
     result_ceo: "td:nth-child(4)"           # 대표자명
     result_address: "td:nth-child(5)"       # 기업 소재지
     result_industry: "td:nth-child(6)"      # 산업명(업종)
-    # ⚠️ href 없음: 기업명이 <button>이라 JS 클릭 이동. collector 를 클릭 방식으로 수정 예정.
-    #    행 내 상세 진입 버튼: 7번째 칸의 '개요' 버튼
-    result_detail_btn: "td:nth-child(7) button:has-text('개요')"   # 상세('개요') 클릭 버튼
+    # 상세 진입: 기업명 버튼 클릭(같은 페이지에 요약 렌더 - 사용자 확인).
+    # '개요' 버튼은 새 탭/다른 동작 가능성이 있어 기업명 클릭을 기본으로 사용.
+    result_detail_btn: "td:nth-child(2) button"
     result_link: ""                         # (구) href 방식 미사용
     next_page_btn: "button[aria-label='다음 페이지']:not(.v-btn--disabled)"  # 실측
   # 상세(개요)는 검색 결과에서 '개요' 클릭 시 같은 페이지에 인라인 렌더된다(SPA).
