@@ -6,12 +6,9 @@ echo "[1/3] 파이썬 패키지 설치..."
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 
-echo "[2/3] Playwright 크롬 설치 (사용자 캐시)..."
-python -m playwright install chromium
-
-echo "[3/3] 크롬 실행용 시스템 라이브러리 설치 (libatk 등)..."
-# 이 단계가 실패해도 브라우저는 이미 설치됨 → non-fatal
-sudo "$(which python)" -m playwright install-deps chromium || \
-  echo "WARN: install-deps 실패. 필요 시 수동: sudo \$(which python) -m playwright install-deps chromium"
+echo "[2/2] Playwright 크롬 + 시스템 라이브러리 설치..."
+# --with-deps 가 브라우저(사용자 캐시) + apt 시스템 라이브러리를 한 번에 처리.
+# (sudo python -m playwright 방식은 root가 사용자 site-packages를 못 봐서 실패하므로 사용 안 함)
+python -m playwright install --with-deps chromium
 
 echo "설치 완료. 웹앱 실행:  python -m streamlit run nice_bizline/app/web/streamlit_app.py"
