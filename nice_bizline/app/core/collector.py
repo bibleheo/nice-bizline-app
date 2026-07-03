@@ -13,6 +13,7 @@ import re
 import time
 from typing import Protocol
 
+from .matcher import CORP_FORM_RE
 from .normalizer import amount_to_millions
 
 
@@ -396,23 +397,18 @@ def _digits(s) -> str:
 
 
 # 검색어에서 법인격 표기만 제거(핵심 상호로 검색해 적중률↑). 공백은 유지.
-_SEARCH_STRIP = re.compile(
-    r"㈜|\(\s*(?:주|유|재|사)\s*\)"
-    r"|주식회사|유한회사|유한책임회사|합자회사|합명회사|재단법인|사단법인|의료법인|학교법인")
-
-
+# 패턴은 matcher.CORP_FORM_RE 와 공유 (상법 5종 + 민법·특별법인 전부).
 def _search_term(name) -> str:
-    s = _SEARCH_STRIP.sub(" ", name or "")
+    s = CORP_FORM_RE.sub(" ", name or "")
     return re.sub(r"\s+", " ", s).strip()
 
 
-# 이름 비교용 정규화(법인격 표기·기호 제거). matcher._norm_company와 동일 취지.
-_NAME_STRIP = re.compile(
-    r"㈜|\(\s*(?:주|유|재|사)\s*\)|주식회사|유한회사|[\s()\[\]·.,\-_/]")
+# 이름 비교용 정규화: matcher와 동일 규칙 사용 (법인격 표기 + 기호 제거)
+_SYMBOL_STRIP = re.compile(r"[\s()\[\]·.,\-_/]")
 
 
 def _norm_name(s) -> str:
-    return _NAME_STRIP.sub("", s or "").lower()
+    return _SYMBOL_STRIP.sub("", CORP_FORM_RE.sub("", s or "")).lower()
 
 
 def _lookup(basic: dict, label: str) -> str | None:
