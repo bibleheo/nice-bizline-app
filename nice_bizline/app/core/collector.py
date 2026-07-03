@@ -285,7 +285,7 @@ class NiceBizlineCollector:
         # ElementHandle은 SPA 재렌더 시 detached 되므로 Locator로 매번 재조회한다.
         for page_num in range(1, max(1, max_pages) + 1):
             try:
-                self._page.wait_for_selector(sel["result_rows"], timeout=5000)
+                self._page.wait_for_selector(sel["result_rows"], timeout=8000)
             except Exception:
                 break
             rows = self._page.locator(sel["result_rows"])
