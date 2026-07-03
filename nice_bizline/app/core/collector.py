@@ -249,6 +249,8 @@ class NiceBizlineCollector:
             for k, v in detail.items():
                 if v not in (None, ""):
                     base[k] = v
+        else:
+            base["_detail_failed"] = True   # 결과 비고에 '상세 미진입' 표기용
         return base
 
     def _open_detail(self, candidate: dict) -> None:
@@ -280,7 +282,14 @@ class NiceBizlineCollector:
                 except Exception:
                     continue
                 if (target_biz and rb == target_biz) or (not target_biz and rn == target_name):
-                    row.locator(sel["result_detail_btn"]).first.click(timeout=5000)
+                    btn = row.locator(sel["result_detail_btn"]).first
+                    btn.click(timeout=5000)
+                    # Vue 핸들러가 늦게 붙어 클릭이 씹히는 경우 → 1회 재클릭
+                    if not self._detail_ready(dsel, timeout=6000):
+                        try:
+                            btn.click(timeout=3000)
+                        except Exception:
+                            pass
                     self._wait_detail_loaded(dsel)
                     return
             if not next_sel or page_num >= max_pages:
@@ -295,15 +304,35 @@ class NiceBizlineCollector:
                 break
         raise CollectorError("상세 진입 대상 행을 찾지 못함")
 
-    def _wait_detail_loaded(self, dsel: dict) -> None:
+    def _detail_ready(self, dsel: dict, timeout: int = 6000) -> bool:
         try:
-            self._page.wait_for_selector(dsel["ready_marker"], timeout=12000)
-        except Exception as e:
+            self._page.wait_for_selector(dsel["ready_marker"], timeout=timeout,
+                                         state="visible")
+            return True
+        except Exception:
+            return False
+
+    def _wait_detail_loaded(self, dsel: dict) -> None:
+        if not self._detail_ready(dsel, timeout=12000):
             if self.is_login_page():
                 raise LoginRequired()
-            raise CollectorError(f"상세 로딩 실패: {e}")
+            shot = self._debug_shot("detail_fail")
+            raise CollectorError(
+                f"상세 로딩 실패 (url={self._page.url}"
+                + (f", 스크린샷={shot}" if shot else "") + ")")
         if self.is_login_page():
             raise LoginRequired()
+
+    def _debug_shot(self, tag: str) -> str | None:
+        """실패 순간 화면을 저장해 원인 파악에 사용."""
+        try:
+            import os
+            os.makedirs("debug", exist_ok=True)
+            path = f"debug/{tag}_{time.strftime('%H%M%S')}.png"
+            self._page.screenshot(path=path)
+            return path
+        except Exception:
+            return None
 
     def _parse_detail(self, candidate: dict) -> dict:
         dsel = self._cfg["selectors"]["detail"]

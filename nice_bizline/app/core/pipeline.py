@@ -242,6 +242,8 @@ def _collect(collector, opts, state, weights, query, name):
         notes = []
         if total_picks > 1:
             notes.append(f"동명 {total_picks}건 중 {idx}")
+        if rec.pop("_detail_failed", None):
+            notes.append("상세 미진입(기본정보만)")
         if missing:
             notes.append(f"권한없음/미제공: {', '.join(missing)}")
         rec["비고"] = " / ".join(notes)
