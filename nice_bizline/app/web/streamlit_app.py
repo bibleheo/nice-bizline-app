@@ -27,6 +27,7 @@ from nice_bizline.app.core.collector import MockCollector, NiceBizlineCollector
 from nice_bizline.app.core.pipeline import PipelineOptions, PipelineState, run_pipeline
 from nice_bizline.app.excelio.reader import available_filter_fields, read_company_list
 from nice_bizline.app.excelio.writer import write_results
+from nice_bizline.app.core.timeutil import now_seoul
 
 
 CONFIG_PATH = Path(__file__).resolve().parents[2] / "config.yaml"
@@ -181,7 +182,7 @@ def _run_collection(cfg, companies, user_id, password, input_path, narrow_fields
         if t == "log":
             level = event["level"]
             emoji = {"info": "ℹ️", "warn": "⚠️", "error": "❌"}.get(level, "•")
-            ts = datetime.now().strftime("%H:%M:%S")
+            ts = now_seoul().strftime("%H:%M:%S")
             logs.append(f"{ts}  {emoji} {event['message']}")
             log_placeholder.code("\n".join(logs[-25:]), language=None)
         elif t == "progress":
@@ -195,7 +196,7 @@ def _run_collection(cfg, companies, user_id, password, input_path, narrow_fields
             st.session_state.logs = logs
 
     # 결과 엑셀을 메모리 버퍼로 생성
-    ts = datetime.now().strftime("%Y%m%d_%H%M")
+    ts = now_seoul().strftime("%Y%m%d_%H%M")
     base = Path(input_path).stem if input_path else "결과"
     out_name = f"{base}_나이스비즈라인결과_{ts}.xlsx"
     tmp_path = Path(tempfile.gettempdir()) / out_name

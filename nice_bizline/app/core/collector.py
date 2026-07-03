@@ -15,6 +15,7 @@ from typing import Protocol
 
 from .matcher import CORP_FORM_RE
 from .normalizer import amount_to_millions
+from .timeutil import now_seoul
 
 
 class CollectorError(Exception):
@@ -357,7 +358,7 @@ class NiceBizlineCollector:
         try:
             import os
             os.makedirs("debug", exist_ok=True)
-            path = f"debug/{tag}_{time.strftime('%H%M%S')}.png"
+            path = f"debug/{tag}_{now_seoul().strftime('%H%M%S')}.png"
             self._page.screenshot(path=path)
             return path
         except Exception:

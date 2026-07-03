@@ -9,6 +9,7 @@ import os
 import sys
 import tkinter as tk
 from datetime import datetime
+from nice_bizline.app.core.timeutil import now_seoul
 from tkinter import filedialog, messagebox, ttk
 
 from ..core import checkpoint, credentials, file_logger
@@ -293,7 +294,7 @@ class MainWindow(tk.Tk):
         self.after(0, self._on_worker_done, summary)
 
     def _append_log(self, level: str, msg: str) -> None:
-        ts = datetime.now().strftime("%H:%M:%S")
+        ts = now_seoul().strftime("%H:%M:%S")
         self._log.configure(state="normal")
         self._log.insert("end", f"{ts}  {msg}\n", level)
         self._log.see("end")
@@ -321,7 +322,7 @@ class MainWindow(tk.Tk):
 
         # 결과 저장
         base, _ = os.path.splitext(self._input_path)
-        out = f"{base}_나이스비즈라인결과_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+        out = f"{base}_나이스비즈라인결과_{now_seoul().strftime('%Y%m%d_%H%M')}.xlsx"
         try:
             write_results(
                 out,

@@ -5,6 +5,7 @@ from datetime import datetime
 
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from nice_bizline.app.core.timeutil import now_seoul
 
 
 _BASE_HEADERS_BEFORE_FINANCE = [
@@ -191,7 +192,7 @@ def write_results(path: str, records: list[dict], unfound: list[dict],
     ws4.column_dimensions["B"].width = 30
     rows = [
         ("시작 시각", summary.get("started_at", "")),
-        ("종료 시각", summary.get("ended_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))),
+        ("종료 시각", summary.get("ended_at", now_seoul().strftime("%Y-%m-%d %H:%M:%S"))),
         ("총 건수", summary.get("total", 0)),
         ("성공", summary.get("success", 0)),
         ("미발견", summary.get("not_found", 0)),

@@ -15,6 +15,7 @@ from .collector import CollectorError, LoginRequired
 from .matcher import select_matches
 from .normalizer import normalize_amount, normalize_record
 from .session import SessionManager
+from .timeutil import now_seoul
 
 
 @dataclass
@@ -54,7 +55,7 @@ def run_pipeline(collector, cfg: dict, opts: PipelineOptions,
     if state is None:
         state = PipelineState()
 
-    started = datetime.now()
+    started = now_seoul()
     state.summary["started_at"] = started.strftime("%Y-%m-%d %H:%M:%S")
 
     session = SessionManager(cfg["timing"].get("relogin_threshold_minutes", 9))
@@ -236,7 +237,7 @@ def _collect(collector, opts, state, weights, query, name):
         rec = normalize_record(detail)
         rec.update(_finance_columns(rec, opts.finance_years))
         rec["조회상태"] = "성공"
-        rec["조회일시"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        rec["조회일시"] = now_seoul().strftime("%Y-%m-%d %H:%M:%S")
         missing = [k for k in ("매출액", "영업이익", "당기순이익", "신용등급")
                    if rec.get(k) in (None, "")]
         notes = []
@@ -270,7 +271,7 @@ def _finalize(state, opts, session, stopped, collector):
         ))
 
     s = state.summary
-    s["ended_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    s["ended_at"] = now_seoul().strftime("%Y-%m-%d %H:%M:%S")
     s["total"] = len(opts.companies)
     s["success"] = sum(1 for r in state.records if r.get("조회상태") == "성공")
     s["not_found"] = sum(1 for r in state.records if r.get("조회상태") == "미발견")
@@ -310,7 +311,7 @@ def _blank_row(name: str, status: str, reason: str = "") -> dict:
     return {
         "회사명": name,
         "조회상태": status,
-        "조회일시": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "조회일시": now_seoul().strftime("%Y-%m-%d %H:%M:%S"),
         "비고": reason,
     }
 
