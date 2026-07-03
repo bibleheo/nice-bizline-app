@@ -230,7 +230,7 @@ class NiceBizlineCollector:
             "대표자": candidate.get("대표자명"),
             "주소": candidate.get("주소"),
             "업종": candidate.get("업종"),
-            "설립일": None, "대표번호": None, "종업원수": None,
+            "설립일": None, "대표번호": None, "종업원수": None, "휴폐업정보": None,
             "매출액": None, "영업이익": None, "당기순이익": None,
             "신용등급": None, "결산일자": None,
         }
@@ -396,6 +396,7 @@ class NiceBizlineCollector:
             "설립일": _lookup(basic, dsel["label_founded"]),
             "대표번호": (data.get("tel") or "").strip() or None,
             "종업원수": _leading_int(_lookup(basic, dsel["label_employees"])),
+            "휴폐업정보": _lookup(basic, "휴폐업정보"),
             "매출액": fin_amt("매출액"),
             "영업이익": fin_amt("영업이익"),
             "당기순이익": fin_amt("당기순이익"),
