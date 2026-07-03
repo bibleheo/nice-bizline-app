@@ -70,39 +70,45 @@ class NiceBizlineCollector:
         sel = self._cfg["selectors"]["login"]
         self._page.goto(self._cfg["site"]["login_url"])
         # 세션이 아직 살아있으면 로그인 폼 대신 '나의정보' 마커가 바로 보인다.
-        # (선제 재로그인 타이머가 일찍 돌아도 실제로는 로그인 유지 중일 수 있음)
         if self._visible(sel["logged_in_marker"], timeout=4000):
             return
-        if not self._visible(sel["id_input"], timeout=4000):
-            raise CollectorError("로그인 폼을 찾지 못함 (팝업 또는 페이지 구조 변경 가능)")
-        self._page.fill(sel["id_input"], user_id)
-        self._page.fill(sel["pw_input"], password)
-        self._page.click(sel["submit_btn"])
-        # 동시접속 제한 팝업이 뜨면 기존 접속을 강제 종료
-        self._dismiss_concurrent_popup()
-        if not self._visible(sel["logged_in_marker"], timeout=15000):
-            raise CollectorError(
-                "로그인 후 '나의정보' 미노출 (동시접속 팝업 처리 실패 가능)")
+        # 최대 2회: 1차 제출 후 동시접속 팝업으로 기존 접속을 끊고, 필요 시 재제출.
+        for _ in range(2):
+            if not self._visible(sel["id_input"], timeout=4000):
+                break
+            self._page.fill(sel["id_input"], user_id)
+            self._page.fill(sel["pw_input"], password)
+            self._page.click(sel["submit_btn"])
+            self._dismiss_concurrent_popup()
+            if self._visible(sel["logged_in_marker"], timeout=10000):
+                return
+        raise CollectorError(
+            "로그인 후 '나의정보' 미노출 (동시접속 팝업 처리 실패 가능)")
 
     def _dismiss_concurrent_popup(self) -> bool:
-        """동시접속 제한(1명) 팝업 처리: 기존 접속 강제 종료 후 팝업 닫기.
+        """동시접속 제한(1명) 팝업 처리: 접속 종료 → 예 → 확인 순으로 기존 접속 종료.
 
-        순서: 접속 종료 → 예 → 확인. 팝업이 없으면 아무것도 안 하고 False.
+        각 버튼이 화면에 나타날 때까지 기다렸다 누른다(다이얼로그가 순차 등장).
+        팝업이 없으면 아무것도 안 하고 False.
         """
         sess = self._cfg["selectors"].get("session", {}) or {}
-        first = sess.get("disconnect_btn") or "button:has-text('접속 종료'):visible"
-        if not self._visible(first, timeout=3000):
+        steps = sess.get("disconnect_steps") or ["접속 종료", "예", "확인"]
+        if not steps:
             return False
-        steps = [
-            first,
-            sess.get("disconnect_confirm_btn") or "button:has-text('예'):visible",
-            sess.get("disconnect_done_btn") or "button:has-text('확인'):visible",
-        ]
-        for s in steps:
+        # 첫 버튼(접속 종료)이 안 뜨면 팝업이 없는 것
+        try:
+            self._page.get_by_role("button", name=steps[0], exact=True).first.wait_for(
+                state="visible", timeout=5000)
+        except Exception:
+            return False
+        for name in steps:
             try:
-                self._page.locator(s).first.click(timeout=5000)
+                btn = self._page.get_by_role("button", name=name, exact=True).first
+                btn.wait_for(state="visible", timeout=6000)
+                btn.click(timeout=5000)
             except Exception:
                 pass
+            self._page.wait_for_timeout(600)   # 다음 단계 다이얼로그 등장 대기
         return True
 
     def _visible(self, selector: str, timeout: int = 4000) -> bool:
