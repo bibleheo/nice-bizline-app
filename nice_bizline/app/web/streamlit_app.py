@@ -25,7 +25,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from nice_bizline.app.core.collector import MockCollector, NiceBizlineCollector
 from nice_bizline.app.core.pipeline import PipelineOptions, PipelineState, run_pipeline
-from nice_bizline.app.excelio.reader import read_company_list
+from nice_bizline.app.excelio.reader import available_filter_fields, read_company_list
 from nice_bizline.app.excelio.writer import write_results
 
 
@@ -95,15 +95,33 @@ def main():
             f.write(uploaded.getbuffer())
         try:
             companies = read_company_list(input_path)
-            st.success(f"입력 로드 완료 - {len(companies)}건 (컬럼: {list(companies[0].keys()) if companies else []})")
+            cols = list(companies[0].keys()) if companies else []
+            st.success(f"입력 로드 완료 - {len(companies)}건 (컬럼: {cols})")
             with st.expander("첫 5건 미리보기"):
                 st.dataframe([{"회사명": c.get("회사명"), "사업자번호": c.get("사업자번호", ""),
                                "대표자명": c.get("대표자명", "")} for c in companies[:5]])
         except Exception as e:
             st.error(f"엑셀 읽기 실패: {e}")
 
+    # ─── 중복 필터 컬럼 선택 (헤더에 있는 것만 체크박스로) ───
+    narrow_fields: list[str] = []
+    if companies:
+        avail = available_filter_fields(companies)
+        st.subheader("② 중복 필터")
+        if avail:
+            st.caption("회사명만으로 검색하면 동명 회사가 많이 나옵니다. "
+                       "아래에서 체크한 컬럼으로 관련 회사만 남깁니다.")
+            for f in avail:
+                label = {"대표자명": "대표자명 일치", "주소": "주소(지역) 일치"}.get(f, f)
+                if st.checkbox(label, value=True, key=f"narrow_{f}",
+                               disabled=st.session_state.running):
+                    narrow_fields.append(f)
+        else:
+            st.caption("이 파일에는 중복 필터에 쓸 컬럼(대표자명/주소)이 없어, "
+                       "동명 회사는 모두 수집됩니다.")
+
     # ─── 계정 (모의 모드는 스킵) ───
-    st.subheader("② 계정")
+    st.subheader("③ 계정")
     col1, col2 = st.columns(2)
     with col1:
         user_id = st.text_input(
@@ -119,21 +137,21 @@ def main():
         )
 
     # ─── 시작 버튼 ───
-    st.subheader("③ 실행")
+    st.subheader("④ 실행")
     start_disabled = (
         st.session_state.running
         or not companies
         or (not st.session_state.mock and not (user_id and password))
     )
     if st.button("▶ 조회 시작", type="primary", disabled=start_disabled):
-        _run_collection(cfg, companies, user_id, password, input_path)
+        _run_collection(cfg, companies, user_id, password, input_path, narrow_fields)
 
     # ─── 진행/결과 표시 ───
     if st.session_state.done_summary:
         _render_results()
 
 
-def _run_collection(cfg, companies, user_id, password, input_path):
+def _run_collection(cfg, companies, user_id, password, input_path, narrow_fields=None):
     """파이프라인을 동기 실행하며 Streamlit UI를 갱신."""
     st.session_state.running = True
     st.session_state.logs = []
@@ -153,6 +171,7 @@ def _run_collection(cfg, companies, user_id, password, input_path):
         finance_years=st.session_state.finance_years,
         input_path=input_path,
         checkpoint_every=10,
+        narrow_fields=narrow_fields or None,
     )
     pstate = PipelineState()
 

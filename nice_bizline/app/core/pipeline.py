@@ -35,6 +35,8 @@ class PipelineOptions:
     input_path: str = ""
     resume: bool = False
     checkpoint_every: int = 10
+    # 중복(동명) 필터에 사용할 컬럼. None이면 존재하는 값 모두 사용.
+    narrow_fields: list | None = None
 
 
 def run_pipeline(collector, cfg: dict, opts: PipelineOptions,
@@ -187,7 +189,7 @@ def _process_one(collector, opts, state, session, weights, query, name):
 
 def _collect(collector, opts, state, weights, query, name):
     candidates = collector.search(name)
-    res = select_matches(query, candidates, weights)
+    res = select_matches(query, candidates, weights, opts.narrow_fields)
 
     if res.dropped:
         yield _log("info", f"[{name}] 비기업(펀드/ETF 등) {res.dropped}건 제외")

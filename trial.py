@@ -22,7 +22,7 @@ if str(_ROOT) not in sys.path:
 
 from nice_bizline.app.core.collector import MockCollector, NiceBizlineCollector
 from nice_bizline.app.core.pipeline import PipelineOptions, run_pipeline
-from nice_bizline.app.excelio.reader import read_company_list
+from nice_bizline.app.excelio.reader import available_filter_fields, read_company_list
 from nice_bizline.app.excelio.writer import write_results
 
 
@@ -41,6 +41,23 @@ def main() -> None:
         print("입력이 비었습니다. 파일을 확인하세요.")
         return
 
+    # 중복(동명) 필터 컬럼 선택 - 헤더에 있는 것만 제시
+    narrow_fields = None
+    avail = available_filter_fields(companies)
+    if avail:
+        print("동명 회사가 많을 때 걸러낼 컬럼(입력에 존재):", ", ".join(avail))
+        ans = input(
+            f"중복 필터에 쓸 컬럼을 고르세요 [기본=전체 사용: {','.join(avail)}] "
+            "(안 쓰려면 none, 일부만 쓰려면 쉼표로): "
+        ).strip()
+        if ans.lower() in ("none", "n", "x"):
+            narrow_fields = []
+        elif ans:
+            narrow_fields = [f.strip() for f in ans.split(",") if f.strip() in avail]
+        else:
+            narrow_fields = avail
+        print(f"→ 중복 필터 컬럼: {narrow_fields or '(사용 안 함)'}\n")
+
     if mock:
         print("=== 모의(mock) 모드 ===")
         collector = MockCollector(cfg)
@@ -54,7 +71,7 @@ def main() -> None:
 
     opts = PipelineOptions(
         user_id=uid, password=pw, companies=companies,
-        finance_years=1, input_path=inp,
+        finance_years=1, input_path=inp, narrow_fields=narrow_fields,
     )
 
     state = None

@@ -71,15 +71,19 @@ def _dedup_by_biz(cands: list[dict]) -> list[dict]:
     return out
 
 
-def select_matches(query: dict, candidates: list[dict], weights: dict) -> SelectResult:
+def select_matches(query: dict, candidates: list[dict], weights: dict,
+                   narrow_fields: list | set | None = None) -> SelectResult:
     """수집 대상 후보를 선별한다.
 
     규칙:
       1. 사업자번호 없는 후보(펀드/ETF 등)는 제외한다.
       2. 입력에 사업자번호가 있으면 그 번호와 일치하는 1건만 확정한다.
-      3. 사업자번호를 모르면, 상호가 정확히 일치하는 실제 기업을 모두 채택한다.
+      3. 사업자번호를 모르면, 상호가 정확히 일치하는 실제 기업을 채택하되,
+         narrow_fields(대표자명/주소)로 동명 후보를 좁힌다.
          - 1건이면 'single', 여러 건(동명이인)이면 'multiple' → 전부 수집.
          - 정확 일치가 없으면 'ambiguous'로 두어 검수하도록 한다.
+
+    narrow_fields: 중복 필터에 사용할 컬럼 집합. None이면 존재하는 값 모두 사용.
     """
     real = [c for c in candidates if _has_biz(c)]
     dropped = len(candidates) - len(real)
@@ -96,11 +100,13 @@ def select_matches(query: dict, candidates: list[dict], weights: dict) -> Select
             return SelectResult("biz", exact[:1], others, dropped)
         # 사업자번호를 줬는데 결과에 없음 → 이름으로 재판단 (아래로 진행)
 
-    # 3) 상호 정확 일치로 동명 회사 전부 채택
+    # 3) 상호 정확 일치로 동명 회사 채택
     qn = _norm_company(query.get("회사명"))
     name_matches = [c for c in real if _norm_company(c.get("회사명")) == qn] if qn else []
     # 같은 회사가 상호 표기만 달리해 여러 번 뜨는 경우 사업자번호로 중복 제거
     name_matches = _dedup_by_biz(name_matches)
+    # 선택된 컬럼(대표자명/주소)으로 동명 후보를 좁혀 중복을 줄인다
+    name_matches = _narrow_by_query(query, name_matches, narrow_fields)
     others = [c for c in real if c not in name_matches]
 
     if not name_matches:
@@ -116,6 +122,43 @@ def _addr_tokens(addr: str | None) -> set[str]:
         return set()
     tokens = re.findall(r"[가-힣A-Za-z]+(?:특별시|광역시|특별자치시|특별자치도|도|시|군|구)", addr)
     return set(tokens)
+
+
+def _region_tokens(addr: str | None) -> set[str]:
+    """주소 앞부분 지역 토큰(광역/시/구)을 대략 추출. 예: '(42019) 대구 수성구 …' → {'대구','수성구'}."""
+    if not addr:
+        return set()
+    s = re.sub(r"\(\d+\)", " ", str(addr))          # 우편번호 제거
+    s = re.sub(r"[,()]", " ", s)
+    toks = [t for t in s.split() if t]
+    return set(toks[:2])                             # 앞 2개(시/도 + 시/군/구)
+
+
+def _narrow_by_query(query: dict, cands: list[dict],
+                     fields: list | set | None = None) -> list[dict]:
+    """동명 후보를 입력의 대표자명/주소로 좁힌다(매치가 있을 때만; 없으면 원본 유지).
+
+    fields: 사용할 컬럼 집합. None이면 값이 있는 컬럼 모두 사용.
+    """
+    if len(cands) <= 1:
+        return cands
+    use = None if fields is None else set(fields)
+    out = cands
+
+    if use is None or "대표자명" in use:
+        q_ceo = (query.get("대표자명") or "").strip()
+        if q_ceo:
+            by_ceo = [c for c in out if (c.get("대표자명") or "").strip() == q_ceo]
+            if by_ceo:
+                out = by_ceo
+
+    if (use is None or "주소" in use) and len(out) > 1:
+        q_reg = _region_tokens(query.get("주소"))
+        if q_reg:
+            by_addr = [c for c in out if _region_tokens(c.get("주소")) & q_reg]
+            if by_addr:
+                out = by_addr
+    return out
 
 
 def score_candidate(query: dict, candidate: dict, weights: dict) -> int:

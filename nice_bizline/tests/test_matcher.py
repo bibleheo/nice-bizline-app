@@ -98,6 +98,37 @@ def test_select_matches_biz_number_confirms():
     assert r.picks[0]["사업자번호"] == "222-22-22222"
 
 
+def test_select_matches_narrow_by_ceo():
+    """입력에 대표자명이 있으면 동명 후보를 대표자로 좁힌다."""
+    r = select_matches({"회사명": "세명", "대표자명": "이경환"}, [
+        {"회사명": "세명(주)", "사업자번호": "111-11-11111", "대표자명": "김철수"},
+        {"회사명": "세명(주)", "사업자번호": "222-22-22222", "대표자명": "이경환"},
+        {"회사명": "세명(주)", "사업자번호": "333-33-33333", "대표자명": "박영수"},
+    ], WEIGHTS)
+    assert r.status == "single"
+    assert r.picks[0]["사업자번호"] == "222-22-22222"
+
+
+def test_select_matches_narrow_by_address():
+    """입력에 주소가 있으면 지역(앞부분)으로 좁힌다."""
+    r = select_matches({"회사명": "세명", "주소": "대구 북구"}, [
+        {"회사명": "세명(주)", "사업자번호": "111-11-11111", "주소": "서울 강남구"},
+        {"회사명": "세명(주)", "사업자번호": "222-22-22222", "주소": "(41513) 대구 북구 검단로"},
+    ], WEIGHTS)
+    assert r.status == "single"
+    assert r.picks[0]["사업자번호"] == "222-22-22222"
+
+
+def test_select_matches_narrow_no_match_keeps_all():
+    """좁힐 값이 아무 후보와도 안 맞으면 원본 유지(오탈자/정보 불일치 대비)."""
+    r = select_matches({"회사명": "세명", "대표자명": "없는사람"}, [
+        {"회사명": "세명(주)", "사업자번호": "111-11-11111", "대표자명": "김철수"},
+        {"회사명": "세명(주)", "사업자번호": "222-22-22222", "대표자명": "이경환"},
+    ], WEIGHTS)
+    assert r.status == "multiple"
+    assert len(r.picks) == 2
+
+
 def test_select_matches_none_when_all_noise():
     r = select_matches({"회사명": "X"},
                        [{"회사명": "X펀드", "사업자번호": "-"}], WEIGHTS)
