@@ -233,17 +233,22 @@ class NiceBizlineCollector:
             "매출액": None, "영업이익": None, "당기순이익": None,
             "신용등급": None, "결산일자": None,
         }
-        try:
-            self._open_detail(candidate)
-            detail = self._parse_detail(candidate)
-        except LoginRequired:
-            raise
-        except CollectorError:
-            return base   # 상세 실패해도 기본정보는 반환
+        # 상세 진입은 SPA 재렌더로 불안정 → 실패 시 1회 재시도
+        detail = None
+        for _ in range(2):
+            try:
+                self._open_detail(candidate)
+                detail = self._parse_detail(candidate)
+                break
+            except LoginRequired:
+                raise
+            except CollectorError:
+                detail = None
         # 상세에서 얻은 값으로 보강(빈 값은 base 유지)
-        for k, v in detail.items():
-            if v not in (None, ""):
-                base[k] = v
+        if detail:
+            for k, v in detail.items():
+                if v not in (None, ""):
+                    base[k] = v
         return base
 
     def _open_detail(self, candidate: dict) -> None:
@@ -255,6 +260,8 @@ class NiceBizlineCollector:
         # 상세 진입 전 항상 새로 검색해 깨끗한 결과 목록에서 대상 행을 찾는다.
         # (직전에 상세를 본 뒤 목록이 사라지거나 어긋나 '행 못 찾음'이 나던 문제 방지)
         self._open_search(candidate.get("회사명") or "")
+        # 결과 표가 비동기로 채워질 시간을 잠깐 준다(클릭 레이스 방지)
+        self._page.wait_for_timeout(800)
 
         max_pages = int(self._cfg.get("timing", {}).get("max_search_pages", 1))
         next_sel = sel.get("next_page_btn") or ""
@@ -290,7 +297,7 @@ class NiceBizlineCollector:
 
     def _wait_detail_loaded(self, dsel: dict) -> None:
         try:
-            self._page.wait_for_selector(dsel["ready_marker"], timeout=10000)
+            self._page.wait_for_selector(dsel["ready_marker"], timeout=12000)
         except Exception as e:
             if self.is_login_page():
                 raise LoginRequired()
