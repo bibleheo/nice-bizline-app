@@ -140,21 +140,34 @@ class NiceBizlineCollector:
     def search(self, company_name: str) -> list[dict]:
         self._delay()
         sel = self._cfg["selectors"]["search"]
-        self._open_search(company_name)
-
-        out: list[dict] = []
-        for row in self._each_result_row(sel):
-            name = _text(row, sel["result_company_name"])
-            if not name:
-                continue
-            out.append({
-                "회사명": name,
-                "사업자번호": _text(row, sel["result_biz_no"]),
-                "대표자명": _text(row, sel["result_ceo"]),
-                "주소": _text(row, sel["result_address"]),
-                "업종": _text(row, sel.get("result_industry") or ""),
-            })
-        return out
+        # SPA 검색이 간헐적으로 결과를 늦게/안 채우는 경우가 있어 0건이면 1회 재시도
+        for attempt in (1, 2):
+            self._open_search(company_name)
+            if attempt == 2:
+                self._page.wait_for_timeout(2000)   # 재시도는 더 여유 있게
+            out: list[dict] = []
+            for row in self._each_result_row(sel):
+                name = _text(row, sel["result_company_name"])
+                if not name:
+                    continue
+                out.append({
+                    "회사명": name,
+                    "사업자번호": _text(row, sel["result_biz_no"]),
+                    "대표자명": _text(row, sel["result_ceo"]),
+                    "주소": _text(row, sel["result_address"]),
+                    "업종": _text(row, sel.get("result_industry") or ""),
+                })
+            if out:
+                return out
+            if attempt == 1:
+                # 빈 결과: 페이지를 새로 열어 검색 상태 초기화 후 재시도
+                try:
+                    self._page.goto(self._cfg["site"].get("search_url")
+                                    or self._cfg["site"]["base_url"])
+                except Exception:
+                    pass
+                self._page.wait_for_timeout(1200)
+        return []
 
     def _open_search(self, company_name: str) -> None:
         """검색창을 확보한 뒤 회사명을 입력하고 검색을 실행.
