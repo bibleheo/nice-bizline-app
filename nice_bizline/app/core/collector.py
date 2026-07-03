@@ -78,9 +78,32 @@ class NiceBizlineCollector:
         self._page.fill(sel["id_input"], user_id)
         self._page.fill(sel["pw_input"], password)
         self._page.click(sel["submit_btn"])
+        # 동시접속 제한 팝업이 뜨면 기존 접속을 강제 종료
+        self._dismiss_concurrent_popup()
         if not self._visible(sel["logged_in_marker"], timeout=15000):
             raise CollectorError(
-                "로그인 후 '나의정보' 미노출 (중복 로그인 팝업 등 확인 필요)")
+                "로그인 후 '나의정보' 미노출 (동시접속 팝업 처리 실패 가능)")
+
+    def _dismiss_concurrent_popup(self) -> bool:
+        """동시접속 제한(1명) 팝업 처리: 기존 접속 강제 종료 후 팝업 닫기.
+
+        순서: 접속 종료 → 예 → 확인. 팝업이 없으면 아무것도 안 하고 False.
+        """
+        sess = self._cfg["selectors"].get("session", {}) or {}
+        first = sess.get("disconnect_btn") or "button:has-text('접속 종료'):visible"
+        if not self._visible(first, timeout=3000):
+            return False
+        steps = [
+            first,
+            sess.get("disconnect_confirm_btn") or "button:has-text('예'):visible",
+            sess.get("disconnect_done_btn") or "button:has-text('확인'):visible",
+        ]
+        for s in steps:
+            try:
+                self._page.locator(s).first.click(timeout=5000)
+            except Exception:
+                pass
+        return True
 
     def _visible(self, selector: str, timeout: int = 4000) -> bool:
         try:

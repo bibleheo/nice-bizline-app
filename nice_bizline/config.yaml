@@ -54,6 +54,11 @@ selectors:
   session:
     # 세션 연장 버튼(클릭 시 10분 연장). 재로그인 대신 9분마다 이 버튼을 누른다.
     extend_btn: "button:has-text('로그인 연장')"
+    # 동시접속 제한(1명) 팝업 처리: 기존 접속 강제 종료 순서
+    #   접속 종료 → 예 → 확인
+    disconnect_btn: "button:has-text('접속 종료'):visible"
+    disconnect_confirm_btn: "button:has-text('예'):visible"
+    disconnect_done_btn: "button:has-text('확인'):visible"
 
   login_page_markers:
     # 세션 만료로 로그인 페이지로 튕긴 경우 감지에 사용
