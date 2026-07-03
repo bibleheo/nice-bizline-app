@@ -228,23 +228,39 @@ class NiceBizlineCollector:
         # (직전에 상세를 본 뒤 목록이 사라지거나 어긋나 '행 못 찾음'이 나던 문제 방지)
         self._open_search(candidate.get("회사명") or "")
 
-        row = None
-        for cand_row in self._each_result_row(sel):
-            rb = _digits(_text(cand_row, sel["result_biz_no"]))
-            rn = _norm_name(_text(cand_row, sel["result_company_name"]))
-            if target_biz and rb == target_biz:
-                row = cand_row
+        max_pages = int(self._cfg.get("timing", {}).get("max_search_pages", 1))
+        next_sel = sel.get("next_page_btn") or ""
+        # ElementHandle은 SPA 재렌더 시 detached 되므로 Locator로 매번 재조회한다.
+        for page_num in range(1, max(1, max_pages) + 1):
+            try:
+                self._page.wait_for_selector(sel["result_rows"], timeout=5000)
+            except Exception:
                 break
-            if not target_biz and rn == target_name:
-                row = cand_row
+            rows = self._page.locator(sel["result_rows"])
+            for i in range(rows.count()):
+                row = rows.nth(i)
+                try:
+                    rb = _digits(row.locator(sel["result_biz_no"]).inner_text(timeout=1500))
+                    rn = _norm_name(row.locator(sel["result_company_name"]).inner_text(timeout=1500))
+                except Exception:
+                    continue
+                if (target_biz and rb == target_biz) or (not target_biz and rn == target_name):
+                    row.locator(sel["result_detail_btn"]).first.click(timeout=5000)
+                    self._wait_detail_loaded(dsel)
+                    return
+            if not next_sel or page_num >= max_pages:
                 break
-        if row is None:
-            raise CollectorError("상세 진입 대상 행을 찾지 못함")
+            nxt = self._page.locator(next_sel)
+            if nxt.count() == 0:
+                break
+            self._delay()
+            try:
+                nxt.first.click(timeout=3000)
+            except Exception:
+                break
+        raise CollectorError("상세 진입 대상 행을 찾지 못함")
 
-        btn = row.query_selector(sel["result_detail_btn"])
-        if btn is None:
-            raise CollectorError("'개요' 버튼을 찾지 못함")
-        btn.click()
+    def _wait_detail_loaded(self, dsel: dict) -> None:
         try:
             self._page.wait_for_selector(dsel["ready_marker"], timeout=10000)
         except Exception as e:
