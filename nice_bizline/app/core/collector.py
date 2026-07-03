@@ -224,9 +224,9 @@ class NiceBizlineCollector:
         target_biz = _digits(candidate.get("사업자번호"))
         target_name = _norm_name(candidate.get("회사명"))
 
-        # 결과 목록이 없으면(직전에 상세를 봤다면) 재검색으로 복원
-        if not self._page.query_selector(sel["result_rows"]):
-            self._open_search(candidate.get("회사명") or "")
+        # 상세 진입 전 항상 새로 검색해 깨끗한 결과 목록에서 대상 행을 찾는다.
+        # (직전에 상세를 본 뒤 목록이 사라지거나 어긋나 '행 못 찾음'이 나던 문제 방지)
+        self._open_search(candidate.get("회사명") or "")
 
         row = None
         for cand_row in self._each_result_row(sel):

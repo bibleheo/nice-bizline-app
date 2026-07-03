@@ -58,6 +58,19 @@ def _has_biz(candidate: dict) -> bool:
     return bool(_digits(candidate.get("사업자번호")))
 
 
+def _dedup_by_biz(cands: list[dict]) -> list[dict]:
+    """사업자번호 기준 중복 제거(첫 등장 유지)."""
+    seen: set[str] = set()
+    out: list[dict] = []
+    for c in cands:
+        b = _digits(c.get("사업자번호"))
+        if b in seen:
+            continue
+        seen.add(b)
+        out.append(c)
+    return out
+
+
 def select_matches(query: dict, candidates: list[dict], weights: dict) -> SelectResult:
     """수집 대상 후보를 선별한다.
 
@@ -86,6 +99,8 @@ def select_matches(query: dict, candidates: list[dict], weights: dict) -> Select
     # 3) 상호 정확 일치로 동명 회사 전부 채택
     qn = _norm_company(query.get("회사명"))
     name_matches = [c for c in real if _norm_company(c.get("회사명")) == qn] if qn else []
+    # 같은 회사가 상호 표기만 달리해 여러 번 뜨는 경우 사업자번호로 중복 제거
+    name_matches = _dedup_by_biz(name_matches)
     others = [c for c in real if c not in name_matches]
 
     if not name_matches:
