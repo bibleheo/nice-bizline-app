@@ -358,8 +358,12 @@ class NiceBizlineCollector:
                 self._page.evaluate(
                     f"window.scrollTo(0, document.body.scrollHeight * {frac})")
                 self._page.wait_for_timeout(400)
+            # 렌더 후에도 값(API)이 늦게 차므로, 재무 카드 값이 뜰 때까지 대기
+            fin_val = f"{dsel['finance_card']} {dsel['finance_value']}"
+            self._page.wait_for_selector(fin_val, timeout=6000, state="visible")
+            self._page.wait_for_timeout(500)   # 값 안정화
         except Exception:
-            pass
+            pass   # 재무 미제공 기업이면 카드가 없어도 정상 → 기본정보만 파싱
         data = self._page.evaluate(_DETAIL_JS, {
             "card": dsel["finance_card"],
             "label": dsel["finance_label"],
