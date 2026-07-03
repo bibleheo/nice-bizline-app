@@ -91,25 +91,49 @@ def _data(cell, row):
     cell.border = _thin()
 
 
+def _input_columns(records: list[dict]) -> list[str]:
+    """records에 연결된 원본 입력 행(_input)의 컬럼을 등장 순서대로 수집."""
+    cols: list[str] = []
+    for rec in records:
+        for k in (rec.get("_input") or {}):
+            if k not in cols:
+                cols.append(k)
+    return cols
+
+
 def write_results(path: str, records: list[dict], unfound: list[dict],
                   ambiguous: list[dict], summary: dict,
                   finance_years: int = 1) -> None:
     wb = openpyxl.Workbook()
+    # 좌측 = 원본 입력 열([입력] 접두), 우측 = 수집 결과 열
+    in_cols = _input_columns(records)
+    in_headers = [f"[입력] {c}" for c in in_cols]
     headers = build_headers(records, finance_years)
+    all_headers = in_headers + headers
 
     # 시트1: 결과
     ws = wb.active
     ws.title = "결과"
-    for col, h in enumerate(headers, 1):
+    for col, h in enumerate(all_headers, 1):
         _header(ws.cell(1, col), h)
     ws.row_dimensions[1].height = 22
-    for i, h in enumerate(headers, 1):
-        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = _col_width(h)
+    for i, h in enumerate(all_headers, 1):
+        base = h[5:] if h.startswith("[입력] ") else h
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = _col_width(base)
 
     for r_idx, rec in enumerate(records, 2):
+        # 입력 열: 동명 여러 건이면 첫 행에만 값 표시
+        show_input = rec.get("_input_show", True)
+        inp = rec.get("_input") or {}
+        for c_idx, c in enumerate(in_cols, 1):
+            val = inp.get(c, "") if show_input else ""
+            cell = ws.cell(r_idx, c_idx, val if val is not None else "")
+            _data(cell, r_idx)
+        # 결과 열
+        off = len(in_cols)
         for c_idx, h in enumerate(headers, 1):
             val = rec.get(h, "")
-            cell = ws.cell(r_idx, c_idx, val if val is not None else "")
+            cell = ws.cell(r_idx, off + c_idx, val if val is not None else "")
             _data(cell, r_idx)
             if _is_numeric_column(h) and isinstance(val, (int, float)):
                 cell.number_format = "#,##0"

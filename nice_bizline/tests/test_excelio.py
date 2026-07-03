@@ -86,6 +86,36 @@ class TestReader:
         assert [r["회사명"] for r in rows] == ["A", "B"]
 
 
+class TestWriterInputColumns:
+    def test_input_columns_left_and_show_once(self, tmp_path):
+        """왼쪽에 [입력] 열, 동명 여러 건이면 입력값은 첫 행에만 표시."""
+        p = tmp_path / "out.xlsx"
+        inp = {"회사명": "동명건설", "주소": "서울"}
+        write_results(
+            str(p),
+            records=[
+                {"회사명": "동명건설(주)", "사업자번호": "111", "조회상태": "성공",
+                 "_input": inp, "_input_show": True},
+                {"회사명": "동명건설(주)", "사업자번호": "222", "조회상태": "성공",
+                 "_input": inp, "_input_show": False},
+            ],
+            unfound=[], ambiguous=[], summary={},
+        )
+        wb = openpyxl.load_workbook(p)
+        ws = wb["결과"]
+        headers = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
+        assert headers[0] == "[입력] 회사명"
+        assert headers[1] == "[입력] 주소"
+        assert "회사명" in headers  # 결과 열도 존재
+        # 첫 행엔 입력값, 둘째 행(동명 2번째)은 빈 칸
+        assert ws.cell(2, 1).value == "동명건설"
+        assert ws.cell(3, 1).value in (None, "")
+        # 결과 열은 두 행 모두 채워짐
+        name_col = headers.index("회사명") + 1
+        assert ws.cell(2, name_col).value == "동명건설(주)"
+        assert ws.cell(3, name_col).value == "동명건설(주)"
+
+
 class TestWriter:
     def test_creates_four_sheets(self, tmp_path):
         p = tmp_path / "out.xlsx"

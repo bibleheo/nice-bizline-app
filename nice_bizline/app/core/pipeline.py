@@ -132,7 +132,7 @@ def run_pipeline(collector, cfg: dict, opts: PipelineOptions,
                     relogin_failures += 1
                     yield _log("error",
                                f"재로그인 실패({relogin_failures}/{_MAX_RELOGIN_FAILURES}): {e}")
-                    _record_error(state, name, f"재로그인 실패: {e}")
+                    _record_error(state, name, f"재로그인 실패: {e}", query)
                     state.processed_keys.add(key)
                     if relogin_failures >= _MAX_RELOGIN_FAILURES:
                         yield _log("error",
@@ -168,22 +168,22 @@ def _process_one(collector, opts, state, session, weights, query, name):
             return
         except LoginRequired:
             if attempt == 2:
-                _record_error(state, name, "세션 만료 재시도 실패")
+                _record_error(state, name, "세션 만료 재시도 실패", query)
                 return
             yield _log("warn", f"[{name}] 세션 만료 감지 → 재로그인 후 재시도")
             try:
                 collector.login(opts.user_id, opts.password)
                 session.mark_login()
             except CollectorError as e:
-                _record_error(state, name, f"재로그인 실패: {e}")
+                _record_error(state, name, f"재로그인 실패: {e}", query)
                 return
         except CollectorError as e:
             yield _log("error", f"[{name}] 수집 오류: {e}")
-            _record_error(state, name, str(e))
+            _record_error(state, name, str(e), query)
             return
         except Exception as e:
             yield _log("error", f"[{name}] 예외: {e}")
-            _record_error(state, name, f"예외: {e}")
+            _record_error(state, name, f"예외: {e}", query)
             return
 
 
@@ -198,7 +198,7 @@ def _collect(collector, opts, state, weights, query, name):
         yield _log("warn", f"[{name}] 미발견")
         reason = "검색 결과 0건" if not candidates else "실제 기업 후보 없음(전부 펀드/ETF 등)"
         state.unfound.append({"회사명": name, "조회상태": "미발견", "사유": reason})
-        state.records.append(_blank_row(name, "미발견", reason))
+        state.records.append(_with_input(_blank_row(name, "미발견", reason), query, True))
         return
 
     if res.status == "ambiguous":
@@ -212,7 +212,8 @@ def _collect(collector, opts, state, weights, query, name):
             "다른후보들": others_desc,
             "사유": "상호가 정확히 일치하는 후보 없음",
         })
-        state.records.append(_blank_row(name, "확인필요", "상호 정확 일치 후보 없음"))
+        state.records.append(_with_input(
+            _blank_row(name, "확인필요", "상호 정확 일치 후보 없음"), query, True))
         return
 
     # biz / single / multiple → 채택된 후보를 전부 상세 수집
@@ -246,6 +247,9 @@ def _collect(collector, opts, state, weights, query, name):
         rec["비고"] = " / ".join(notes)
         new_records.append(rec)
 
+    # 입력 행 정보 연결: 동명 여러 건이어도 입력 정보는 첫 행에만 표시
+    for j, rec in enumerate(new_records):
+        _with_input(rec, query, j == 0)
     state.records.extend(new_records)
     for idx, rec in enumerate(new_records, 1):
         suffix = f" ({idx}/{total_picks})" if total_picks > 1 else ""
@@ -285,9 +289,19 @@ def _key_for(query: dict) -> str:
     return f"{query.get('회사명', '')}|{query.get('사업자번호', '')}"
 
 
-def _record_error(state, name: str, reason: str) -> None:
+def _with_input(rec: dict, query: dict, show: bool) -> dict:
+    """결과 행에 원본 입력 행을 연결. show=True인 행에만 입력값을 표시(동명 중복 시 1회)."""
+    rec["_input"] = dict(query)
+    rec["_input_show"] = bool(show)
+    return rec
+
+
+def _record_error(state, name: str, reason: str, query: dict | None = None) -> None:
     state.unfound.append({"회사명": name, "조회상태": "오류", "사유": reason})
-    state.records.append(_blank_row(name, "오류", reason))
+    row = _blank_row(name, "오류", reason)
+    if query is not None:
+        _with_input(row, query, True)
+    state.records.append(row)
 
 
 def _blank_row(name: str, status: str, reason: str = "") -> dict:

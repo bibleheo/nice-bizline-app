@@ -329,8 +329,8 @@ class NiceBizlineCollector:
             "주소": data.get("address") or candidate.get("주소"),
             "업종": _lookup(basic, dsel["label_industry"]),
             "설립일": _lookup(basic, dsel["label_founded"]),
-            "대표번호": None,
-            "종업원수": _lookup(basic, dsel["label_employees"]),
+            "대표번호": (data.get("tel") or "").strip() or None,
+            "종업원수": _leading_int(_lookup(basic, dsel["label_employees"])),
             "매출액": fin_amt("매출액"),
             "영업이익": fin_amt("영업이익"),
             "당기순이익": fin_amt("당기순이익"),
@@ -409,6 +409,19 @@ def _first_date(text) -> str | None:
     return m.group(0) if m else None
 
 
+def _leading_int(text) -> int | None:
+    """'5명 (2007.12.31 기준)' → 5. 날짜 등 뒤 숫자가 붙는 오염 방지."""
+    if text in (None, ""):
+        return None
+    m = re.match(r"\s*([\d,]+)", str(text))
+    if not m:
+        return None
+    try:
+        return int(m.group(1).replace(",", ""))
+    except ValueError:
+        return None
+
+
 # 상세(개요) 페이지 파싱 JS.
 #  - 기본정보: th(scope=row) 라벨 → 다음 td 값
 #  - 재무: KPI 카드 라벨 → 값(단위 심볼 분리)
@@ -438,7 +451,14 @@ _DETAIL_JS = """
     const t = (el.innerText || "").trim();
     if (t.indexOf(s.settle) === 0) { settlement = t; break; }
   }
-  return { basic: basic, fin: fin, address: address, settlement: settlement };
+  // 전화번호: 라벨 없이 'Tel: 02-123-4567 / Fax: ...' 형태의 td 에 있음
+  let tel = "";
+  for (const td of document.querySelectorAll('td')) {
+    const t = (td.innerText || "");
+    const m = t.match(/Tel\s*[:.]?\s*([0-9][0-9\-.() ]{6,})/i);
+    if (m) { tel = m[1].trim(); break; }
+  }
+  return { basic: basic, fin: fin, address: address, settlement: settlement, tel: tel };
 }
 """
 
