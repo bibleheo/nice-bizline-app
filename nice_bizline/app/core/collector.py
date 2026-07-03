@@ -352,6 +352,14 @@ class NiceBizlineCollector:
 
     def _parse_detail(self, candidate: dict) -> dict:
         dsel = self._cfg["selectors"]["detail"]
+        # 재무 KPI 영역은 v-lazy(스크롤 시 렌더) → 끝까지 스크롤해 렌더 유도
+        try:
+            for frac in (0.35, 0.7, 1.0):
+                self._page.evaluate(
+                    f"window.scrollTo(0, document.body.scrollHeight * {frac})")
+                self._page.wait_for_timeout(400)
+        except Exception:
+            pass
         data = self._page.evaluate(_DETAIL_JS, {
             "card": dsel["finance_card"],
             "label": dsel["finance_label"],
@@ -362,10 +370,18 @@ class NiceBizlineCollector:
         })
         basic = data.get("basic", {})
         fin = data.get("fin", {})
+        table = data.get("table", {}) or {}
+        tunit = (data.get("tunit") or "천원").strip()
 
         def fin_amt(key):
+            # 1순위: KPI 카드(값+단위) / 2순위: 재무제표 표(단위: 천원 등)
             e = fin.get(key)
-            return amount_to_millions(e["v"], e["u"]) if e else None
+            v = amount_to_millions(e["v"], e["u"]) if e else None
+            if v is None:
+                tv = table.get(key)
+                if tv not in (None, "", "-"):
+                    v = amount_to_millions(tv, tunit)
+            return v
 
         out = {
             "회사명": candidate.get("회사명"),
@@ -380,7 +396,7 @@ class NiceBizlineCollector:
             "영업이익": fin_amt("영업이익"),
             "당기순이익": fin_amt("당기순이익"),
             "신용등급": None,   # '개요'에는 없음(신용/등급 탭). 미제공으로 기록됨.
-            "결산일자": _first_date(data.get("settlement")),
+            "결산일자": _first_date(data.get("settlement")) or _first_date(data.get("tdate")),
         }
         return out
 
@@ -498,7 +514,33 @@ _DETAIL_JS = """
     const m = t.match(/Tel\s*[:.]?\s*([0-9][0-9\-.() ]{6,})/i);
     if (m) { tel = m[1].trim(); break; }
   }
-  return { basic: basic, fin: fin, address: address, settlement: settlement, tel: tel };
+  // 재무상태표/(포괄)손익계산서 표: 라벨(th) → 마지막 연도 열 값. 단위/결산일자 포함.
+  let tunit = "";
+  for (const el of document.querySelectorAll('.nbl--info__data, .section__header__desc')) {
+    const t = (el.innerText || "").trim();
+    const m = t.match(/단위\s*[::]\s*([^\s]+)/);
+    if (m) { tunit = m[1]; break; }
+  }
+  const table = {};
+  let tdate = "";
+  for (const cap of document.querySelectorAll('table > caption')) {
+    const nm = (cap.innerText || "").trim();
+    if (nm.indexOf('손익계산서') === -1 && nm.indexOf('재무상태표') === -1) continue;
+    const tbl = cap.parentElement;
+    const ths = tbl.querySelectorAll('thead tr:last-child th');
+    if (ths.length) {
+      const t = (ths[ths.length - 1].innerText || "").trim();
+      if (/\d{4}/.test(t)) tdate = t;
+    }
+    for (const tr of tbl.querySelectorAll('tbody tr')) {
+      const th = tr.querySelector('th');
+      const tds = tr.querySelectorAll('td');
+      if (!th || !tds.length) continue;
+      table[(th.innerText || "").trim()] = (tds[tds.length - 1].innerText || "").trim();
+    }
+  }
+  return { basic: basic, fin: fin, address: address, settlement: settlement,
+           tel: tel, table: table, tunit: tunit, tdate: tdate };
 }
 """
 
