@@ -116,6 +116,31 @@ class TestWriterInputColumns:
         assert ws.cell(3, name_col).value == "동명건설(주)"
 
 
+class TestClosureHighlight:
+    def test_closed_business_cell_highlighted(self, tmp_path):
+        """휴폐업정보가 폐업/휴업이면 셀 배경 강조, 정상(일반과세자)은 무색."""
+        p = tmp_path / "out.xlsx"
+        write_results(
+            str(p),
+            records=[
+                {"회사명": "정상사", "휴폐업정보": "일반과세자", "조회상태": "성공"},
+                {"회사명": "폐업사", "휴폐업정보": "폐업", "조회상태": "성공"},
+                {"회사명": "휴업사", "휴폐업정보": "휴업", "조회상태": "성공"},
+            ],
+            unfound=[], ambiguous=[], summary={},
+        )
+        wb = openpyxl.load_workbook(p)
+        ws = wb["결과"]
+        headers = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
+        col = headers.index("휴폐업정보") + 1
+        normal = ws.cell(2, col).fill.start_color.rgb
+        closed = ws.cell(3, col).fill.start_color.rgb
+        paused = ws.cell(4, col).fill.start_color.rgb
+        assert str(closed).endswith("F4CCCC")
+        assert str(paused).endswith("FCE5CD")
+        assert not str(normal).endswith(("F4CCCC", "FCE5CD"))
+
+
 class TestWriter:
     def test_creates_four_sheets(self, tmp_path):
         p = tmp_path / "out.xlsx"

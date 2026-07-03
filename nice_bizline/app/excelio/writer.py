@@ -50,6 +50,15 @@ _STATUS_COLORS = {
     "오류": "F4CCCC",
 }
 
+# 휴폐업정보 강조: 폐업=빨강, 휴업=주황 (일반과세자 등 정상은 무색)
+def _closure_fill(value: str) -> str | None:
+    s = str(value or "")
+    if "폐업" in s:
+        return "F4CCCC"   # 빨간 계열
+    if "휴업" in s:
+        return "FCE5CD"   # 주황 계열
+    return None
+
 
 def _thin():
     s = Side(style="thin", color="CCCCCC")
@@ -144,6 +153,12 @@ def write_results(path: str, records: list[dict], unfound: list[dict],
                 fill = _STATUS_COLORS.get(str(val), "FFFFFF")
                 cell.fill = PatternFill("solid", start_color=fill)
                 cell.alignment = Alignment(horizontal="center", vertical="center")
+            if h == "휴폐업정보":
+                cf = _closure_fill(val)
+                if cf:
+                    cell.fill = PatternFill("solid", start_color=cf)
+                    cell.font = Font(size=10, bold=True, color="9B0000")
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
 
     # 시트2: 미발견·오류
     ws2 = wb.create_sheet("미발견·오류")
