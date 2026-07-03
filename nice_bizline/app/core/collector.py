@@ -68,13 +68,25 @@ class NiceBizlineCollector:
     def login(self, user_id: str, password: str) -> None:
         sel = self._cfg["selectors"]["login"]
         self._page.goto(self._cfg["site"]["login_url"])
+        # 세션이 아직 살아있으면 로그인 폼 대신 '나의정보' 마커가 바로 보인다.
+        # (선제 재로그인 타이머가 일찍 돌아도 실제로는 로그인 유지 중일 수 있음)
+        if self._visible(sel["logged_in_marker"], timeout=4000):
+            return
+        if not self._visible(sel["id_input"], timeout=4000):
+            raise CollectorError("로그인 폼을 찾지 못함 (팝업 또는 페이지 구조 변경 가능)")
         self._page.fill(sel["id_input"], user_id)
         self._page.fill(sel["pw_input"], password)
         self._page.click(sel["submit_btn"])
+        if not self._visible(sel["logged_in_marker"], timeout=15000):
+            raise CollectorError(
+                "로그인 후 '나의정보' 미노출 (중복 로그인 팝업 등 확인 필요)")
+
+    def _visible(self, selector: str, timeout: int = 4000) -> bool:
         try:
-            self._page.wait_for_selector(sel["logged_in_marker"])
-        except Exception as e:
-            raise CollectorError(f"로그인 실패: {e}")
+            self._page.wait_for_selector(selector, timeout=timeout, state="visible")
+            return True
+        except Exception:
+            return False
 
     # ── 검색 (페이지네이션) ──
     def search(self, company_name: str) -> list[dict]:

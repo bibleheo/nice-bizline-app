@@ -82,6 +82,8 @@ def run_pipeline(collector, cfg: dict, opts: PipelineOptions,
     total = len(opts.companies)
     stopped = False
     seen_this_run: set = set()
+    relogin_failures = 0          # 연속 재로그인 실패 횟수
+    _MAX_RELOGIN_FAILURES = 3     # 이만큼 연속 실패하면 안전 정지
     for i, query in enumerate(opts.companies, 1):
         if stop_check():
             yield _log("warn", "사용자 중단 - 처리분까지 저장합니다.")
@@ -113,14 +115,24 @@ def run_pipeline(collector, cfg: dict, opts: PipelineOptions,
             try:
                 collector.login(opts.user_id, opts.password)
                 session.mark_login()
+                relogin_failures = 0
             except CollectorError as e:
-                yield _log("error", f"재로그인 실패: {e}")
+                relogin_failures += 1
+                yield _log("error",
+                           f"재로그인 실패({relogin_failures}/{_MAX_RELOGIN_FAILURES}): {e}")
                 _record_error(state, name, f"재로그인 실패: {e}")
                 state.processed_keys.add(key)
+                if relogin_failures >= _MAX_RELOGIN_FAILURES:
+                    yield _log("error",
+                               "재로그인 연속 실패 - 안전 정지합니다. "
+                               "처리분까지 저장하며, 나중에 '이어서 진행'으로 재개하세요.")
+                    stopped = True
+                    break
                 continue
 
         yield from _process_one(collector, opts, state, session, weights, query, name)
         state.processed_keys.add(key)
+        relogin_failures = 0
 
         # 주기적 체크포인트
         if opts.input_path and i % max(1, opts.checkpoint_every) == 0:
