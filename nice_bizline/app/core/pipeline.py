@@ -109,26 +109,35 @@ def run_pipeline(collector, cfg: dict, opts: PipelineOptions,
         seen_this_run.add(key)
         yield {"type": "progress", "current": i, "total": total, "name": name}
 
-        # 선제 재로그인
+        # 세션 유지: 우선 '로그인 연장' 버튼 클릭, 안 되면 재로그인으로 폴백
         if session.needs_relogin():
-            yield _log("info", "세션 만료 임박 → 재로그인")
+            extended = False
             try:
-                collector.login(opts.user_id, opts.password)
+                extended = collector.extend_session()
+            except Exception:
+                extended = False
+            if extended:
                 session.mark_login()
                 relogin_failures = 0
-            except CollectorError as e:
-                relogin_failures += 1
-                yield _log("error",
-                           f"재로그인 실패({relogin_failures}/{_MAX_RELOGIN_FAILURES}): {e}")
-                _record_error(state, name, f"재로그인 실패: {e}")
-                state.processed_keys.add(key)
-                if relogin_failures >= _MAX_RELOGIN_FAILURES:
+                yield _log("info", "세션 연장 (+10분)")
+            else:
+                yield _log("info", "세션 연장 버튼 없음 → 재로그인 시도")
+                try:
+                    collector.login(opts.user_id, opts.password)
+                    session.mark_login()
+                    relogin_failures = 0
+                except CollectorError as e:
+                    relogin_failures += 1
                     yield _log("error",
-                               "재로그인 연속 실패 - 안전 정지합니다. "
-                               "처리분까지 저장하며, 나중에 '이어서 진행'으로 재개하세요.")
-                    stopped = True
-                    break
-                continue
+                               f"재로그인 실패({relogin_failures}/{_MAX_RELOGIN_FAILURES}): {e}")
+                    _record_error(state, name, f"재로그인 실패: {e}")
+                    state.processed_keys.add(key)
+                    if relogin_failures >= _MAX_RELOGIN_FAILURES:
+                        yield _log("error",
+                                   "세션 갱신 연속 실패 - 안전 정지합니다. 처리분까지 저장됩니다.")
+                        stopped = True
+                        break
+                    continue
 
         yield from _process_one(collector, opts, state, session, weights, query, name)
         state.processed_keys.add(key)

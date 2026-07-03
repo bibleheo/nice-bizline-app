@@ -28,6 +28,7 @@ class BaseCollector(Protocol):
     def login(self, user_id: str, password: str) -> None: ...
     def search(self, company_name: str) -> list[dict]: ...
     def fetch_detail(self, candidate: dict, finance_years: int = 1) -> dict: ...
+    def extend_session(self) -> bool: ...
     def is_login_page(self) -> bool: ...
     def close(self) -> None: ...
 
@@ -84,6 +85,23 @@ class NiceBizlineCollector:
     def _visible(self, selector: str, timeout: int = 4000) -> bool:
         try:
             self._page.wait_for_selector(selector, timeout=timeout, state="visible")
+            return True
+        except Exception:
+            return False
+
+    # ── 세션 연장 ──
+    def extend_session(self) -> bool:
+        """'로그인 연장' 버튼을 눌러 세션을 10분 연장. 성공 시 True.
+
+        재로그인(중복 로그인 팝업 등으로 실패)을 피하기 위한 기본 유지 방식.
+        버튼이 현재 화면에 없으면 False (호출측이 재로그인으로 폴백).
+        """
+        btn_sel = (self._cfg["selectors"].get("session", {}) or {}).get(
+            "extend_btn") or "button:has-text('로그인 연장')"
+        if not self._visible(btn_sel, timeout=2000):
+            return False
+        try:
+            self._page.click(btn_sel, timeout=3000)
             return True
         except Exception:
             return False
@@ -417,6 +435,9 @@ class MockCollector:
                     base["재무_연도별"] = rows[0].get("_finance_years", [])[:finance_years]
                 return base
         raise CollectorError("상세 정보 없음")
+
+    def extend_session(self) -> bool:
+        return self._logged_in
 
     def is_login_page(self) -> bool:
         return not self._logged_in

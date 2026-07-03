@@ -51,6 +51,10 @@ selectors:
     finance_label: ".section__info__label"
     finance_value: ".section__info__value.point"
     finance_symbol: ".symbol"
+  session:
+    # 세션 연장 버튼(클릭 시 10분 연장). 재로그인 대신 9분마다 이 버튼을 누른다.
+    extend_btn: "button:has-text('로그인 연장')"
+
   login_page_markers:
     # 세션 만료로 로그인 페이지로 튕긴 경우 감지에 사용
     url_contains: "/cm/lgn"                 # 실측: 세션 만료 시 이 경로로 튕김
@@ -58,7 +62,7 @@ selectors:
 
 timing:
   session_minutes: 10           # 절대시간 만료
-  relogin_threshold_minutes: 9  # 9분 경과 시 선제 재로그인
+  relogin_threshold_minutes: 9  # 9분마다 '로그인 연장' 클릭(실패 시 재로그인 폴백)
   request_delay_min_sec: 1.0
   request_delay_max_sec: 3.0
   page_timeout_sec: 30
