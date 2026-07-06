@@ -388,28 +388,60 @@ class NiceBizlineCollector:
         except Exception:
             return None
 
-    def _parse_detail(self, candidate: dict) -> dict:
-        dsel = self._cfg["selectors"]["detail"]
-        # 재무 KPI 영역은 v-lazy(스크롤 시 렌더) → 끝까지 스크롤해 렌더 유도
+    def _click_tab(self, name: str) -> bool:
+        """상세 화면 상단 탭('기업 정보'/'주요 재무 정보') 클릭. 없으면 False."""
+        try:
+            tab = self._page.locator(".v-tab", has_text=name).first
+            if tab.count() == 0:
+                return False
+            tab.click(timeout=3000)
+            self._page.wait_for_timeout(700)
+            return True
+        except Exception:
+            return False
+
+    def _lazy_scroll(self) -> None:
+        """v-lazy(스크롤 시 렌더) 영역 렌더 유도."""
         try:
             for frac in (0.35, 0.7, 1.0):
                 self._page.evaluate(
                     f"window.scrollTo(0, document.body.scrollHeight * {frac})")
                 self._page.wait_for_timeout(400)
-            # 렌더 후에도 값(API)이 늦게 차므로, 재무 카드 값이 뜰 때까지 대기
+        except Exception:
+            pass
+
+    def _wait_fin_values(self, dsel: dict) -> None:
+        """재무 KPI 값(API)이 화면에 찰 때까지 대기. 미제공 기업이면 그냥 통과."""
+        try:
             fin_val = f"{dsel['finance_card']} {dsel['finance_value']}"
             self._page.wait_for_selector(fin_val, timeout=6000, state="visible")
-            self._page.wait_for_timeout(500)   # 값 안정화
+            self._page.wait_for_timeout(500)
         except Exception:
-            pass   # 재무 미제공 기업이면 카드가 없어도 정상 → 기본정보만 파싱
-        data = self._page.evaluate(_DETAIL_JS, {
+            pass
+
+    def _parse_detail(self, candidate: dict) -> dict:
+        dsel = self._cfg["selectors"]["detail"]
+        args = {
             "card": dsel["finance_card"],
             "label": dsel["finance_label"],
             "value": dsel["finance_value"],
             "symbol": dsel["finance_symbol"],
             "addr": dsel["address_value"],
             "settle": dsel.get("settlement_text", "결산 일자"),
-        })
+        }
+        # 1) '기업 정보' 탭에서 기본정보 파싱 (탭이 없으면 현재 화면 그대로)
+        self._click_tab("기업 정보")
+        self._lazy_scroll()
+        data = self._page.evaluate(_DETAIL_JS, args)
+
+        # 2) '주요 재무 정보' 탭이 있으면 클릭해 재무 파싱 후 병합.
+        #    (탭 구조가 아니면 1)에서 이미 스크롤로 재무까지 읽힘)
+        need_fin = not (data.get("fin") or data.get("table"))
+        if self._click_tab("주요 재무 정보") or need_fin:
+            self._lazy_scroll()
+            self._wait_fin_values(dsel)
+            d2 = self._page.evaluate(_DETAIL_JS, args)
+            data = _merge_detail(data, d2)
         basic = data.get("basic", {})
         fin = data.get("fin", {})
         table = data.get("table", {}) or {}
@@ -506,6 +538,20 @@ def _first_date(text) -> str | None:
         return None
     m = _DATE_IN.search(str(text))
     return m.group(0) if m else None
+
+
+def _merge_detail(a: dict, b: dict) -> dict:
+    """두 번의 상세 파싱 결과 병합. dict류는 합치고 단일 값은 먼저 있는 것 우선."""
+    out = dict(a)
+    for k in ("basic", "fin", "table"):
+        merged = dict(a.get(k) or {})
+        for kk, vv in (b.get(k) or {}).items():
+            if kk not in merged or merged[kk] in ("", "-", None):
+                merged[kk] = vv
+        out[k] = merged
+    for k in ("address", "settlement", "tel", "tunit", "tdate"):
+        out[k] = a.get(k) or b.get(k)
+    return out
 
 
 def _leading_int(text) -> int | None:
