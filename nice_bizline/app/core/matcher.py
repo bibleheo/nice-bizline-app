@@ -62,6 +62,12 @@ def _has_biz(candidate: dict) -> bool:
     return bool(_digits(candidate.get("사업자번호")))
 
 
+def _excluded_type(candidate: dict) -> bool:
+    """기업유형 배지가 '개인' 또는 '폐업'이면 수집 제외."""
+    t = (candidate.get("기업유형") or "").strip()
+    return ("개인" in t) or ("폐업" in t)
+
+
 def _dedup_by_biz(cands: list[dict]) -> list[dict]:
     """사업자번호 기준 중복 제거(첫 등장 유지)."""
     seen: set[str] = set()
@@ -89,7 +95,7 @@ def select_matches(query: dict, candidates: list[dict], weights: dict,
 
     narrow_fields: 중복 필터에 사용할 컬럼 집합. None이면 존재하는 값 모두 사용.
     """
-    real = [c for c in candidates if _has_biz(c)]
+    real = [c for c in candidates if _has_biz(c) and not _excluded_type(c)]
     dropped = len(candidates) - len(real)
 
     if not real:

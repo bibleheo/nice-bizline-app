@@ -148,11 +148,15 @@ class NiceBizlineCollector:
                 self._page.wait_for_timeout(2000)   # 재시도는 더 여유 있게
             out: list[dict] = []
             for row in self._each_result_row(sel):
+                # 기업명 버튼이 없는 행은 결과 행이 아님 (다른 표 오인 방지)
+                if not row.query_selector(sel["result_detail_btn"]):
+                    continue
                 name = _text(row, sel["result_company_name"])
                 if not name:
                     continue
                 out.append({
                     "회사명": name,
+                    "기업유형": _text(row, sel.get("result_type") or ""),
                     "사업자번호": _text(row, sel["result_biz_no"]),
                     "대표자명": _text(row, sel["result_ceo"]),
                     "주소": _text(row, sel["result_address"]),

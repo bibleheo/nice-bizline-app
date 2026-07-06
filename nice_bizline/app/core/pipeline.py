@@ -193,7 +193,7 @@ def _collect(collector, opts, state, weights, query, name):
     res = select_matches(query, candidates, weights, opts.narrow_fields)
 
     if res.dropped:
-        yield _log("info", f"[{name}] 비기업(펀드/ETF 등) {res.dropped}건 제외")
+        yield _log("info", f"[{name}] 제외 {res.dropped}건 (펀드/ETF·개인·폐업)")
 
     if res.status == "none":
         yield _log("warn", f"[{name}] 미발견")

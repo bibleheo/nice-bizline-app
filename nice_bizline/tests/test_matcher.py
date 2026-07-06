@@ -148,6 +148,18 @@ def test_select_matches_narrow_no_match_keeps_all():
     assert len(r.picks) == 2
 
 
+def test_select_matches_excludes_personal_and_closed_type():
+    """기업유형이 '개인'/'폐업'인 후보는 수집하지 않는다."""
+    r = select_matches({"회사명": "가나"}, [
+        {"회사명": "가나(주)", "사업자번호": "111-11-11111", "기업유형": "일반"},
+        {"회사명": "가나(주)", "사업자번호": "222-22-22222", "기업유형": "개인"},
+        {"회사명": "가나(주)", "사업자번호": "333-33-33333", "기업유형": "폐업"},
+    ], WEIGHTS)
+    assert r.status == "single"
+    assert r.picks[0]["사업자번호"] == "111-11-11111"
+    assert r.dropped == 2
+
+
 def test_select_matches_none_when_all_noise():
     r = select_matches({"회사명": "X"},
                        [{"회사명": "X펀드", "사업자번호": "-"}], WEIGHTS)

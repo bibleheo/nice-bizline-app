@@ -23,7 +23,10 @@ selectors:
     # ⚠️ 이 표(v-data-table)의 td 클래스명은 내용과 무관(td--date에 사업자번호 등).
     #    따라서 열 위치(nth-child)로 지정한다. 헤더 순서:
     #    1 기업유형 / 2 기업명 / 3 사업자번호 / 4 대표자명 / 5 소재지 / 6 산업명 / 7 바로가기
-    result_rows: ".v-data-table__wrapper table tbody tr"   # 실측
+    # ⚠️ 반드시 '기업 검색 결과' 캡션이 붙은 표만 읽는다.
+    #    (상세 화면의 재무제표 표도 같은 v-data-table 구조라 오인 방지)
+    result_rows: "table:has(caption:text('기업 검색 결과')) tbody tr"
+    result_type: "td:nth-child(1)"          # 기업 유형 배지(상장/외감/일반/개인/폐업)
     result_company_name: "td:nth-child(2)"  # 기업명 (버튼 텍스트)
     result_biz_no: "td:nth-child(3)"        # 사업자번호
     result_ceo: "td:nth-child(4)"           # 대표자명
