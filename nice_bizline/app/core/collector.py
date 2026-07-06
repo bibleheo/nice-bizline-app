@@ -165,13 +165,14 @@ class NiceBizlineCollector:
             if out:
                 return out
             if attempt == 1:
-                # 빈 결과: 페이지를 새로 열어 검색 상태 초기화 후 재시도
+                # 빈 결과: 홈으로 이동해 SPA 컨텍스트를 완전히 초기화 후 재시도
+                # (검색창은 어느 화면에나 있어, 잘못된 화면에서 검색하면 계속 0건이 됨)
                 try:
-                    self._page.goto(self._cfg["site"].get("search_url")
-                                    or self._cfg["site"]["base_url"])
+                    self._page.goto(self._cfg["site"].get("base_url")
+                                    or self._cfg["site"]["search_url"])
                 except Exception:
                     pass
-                self._page.wait_for_timeout(1200)
+                self._page.wait_for_timeout(1500)
         return []
 
     def _open_search(self, company_name: str) -> None:
@@ -437,7 +438,14 @@ class NiceBizlineCollector:
         # 2) '주요 재무 정보' 탭이 있으면 클릭해 재무 파싱 후 병합.
         #    (탭 구조가 아니면 1)에서 이미 스크롤로 재무까지 읽힘)
         need_fin = not (data.get("fin") or data.get("table"))
-        if self._click_tab("주요 재무 정보") or need_fin:
+        if self._click_tab("주요 재무 정보"):
+            self._lazy_scroll()
+            self._wait_fin_values(dsel)
+            d2 = self._page.evaluate(_DETAIL_JS, args)
+            data = _merge_detail(data, d2)
+            # ⚠️ 재무 탭은 SPA 컨텍스트를 바꿔 이후 검색이 전부 0건이 되므로 반드시 복귀
+            self._click_tab("기업 정보")
+        elif need_fin:
             self._lazy_scroll()
             self._wait_fin_values(dsel)
             d2 = self._page.evaluate(_DETAIL_JS, args)
