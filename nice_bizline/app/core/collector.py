@@ -215,6 +215,22 @@ class NiceBizlineCollector:
         except Exception:
             return False
 
+    def _set_page_size_40(self) -> None:
+        """검색 결과 '페이지 당 목록 수'를 40으로 변경 (동명 다수를 한 페이지에서 처리)."""
+        try:
+            footer = self._page.locator(".v-data-footer__select").first
+            if footer.count() == 0:
+                return
+            cur = footer.locator(".v-select__selection").first
+            if cur.count() and cur.inner_text(timeout=1000).strip() == "40":
+                return
+            footer.locator("div[role='button']").first.click(timeout=2000)
+            self._page.locator(".v-menu__content .v-list-item",
+                               has_text="40").first.click(timeout=3000)
+            self._page.wait_for_timeout(800)   # 표 재렌더 대기
+        except Exception:
+            pass
+
     def _each_result_row(self, sel):
         """결과 표의 행을 페이지네이션 한도까지 순회하며 yield."""
         max_pages = int(self._cfg.get("timing", {}).get("max_search_pages", 1))
@@ -224,6 +240,8 @@ class NiceBizlineCollector:
                 self._page.wait_for_selector(sel["result_rows"], timeout=5000)
             except Exception:
                 return
+            if page_num == 1:
+                self._set_page_size_40()
             for row in self._page.query_selector_all(sel["result_rows"]):
                 yield row
             if not next_sel or page_num >= max_pages:
@@ -292,6 +310,8 @@ class NiceBizlineCollector:
                 self._page.wait_for_selector(sel["result_rows"], timeout=8000)
             except Exception:
                 break
+            if page_num == 1:
+                self._set_page_size_40()
             rows = self._page.locator(sel["result_rows"])
             for i in range(rows.count()):
                 row = rows.nth(i)
@@ -505,7 +525,7 @@ def _leading_int(text) -> int | None:
 #  - 기본정보: th(scope=row) 라벨 → 다음 td 값
 #  - 재무: KPI 카드 라벨 → 값(단위 심볼 분리)
 #  - 주소/결산일자
-_DETAIL_JS = """
+_DETAIL_JS = r"""
 (s) => {
   const basic = {};
   document.querySelectorAll('th[scope="row"]').forEach(th => {

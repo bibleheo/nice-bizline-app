@@ -138,14 +138,25 @@ def test_select_matches_narrow_by_address():
     assert r.picks[0]["사업자번호"] == "222-22-22222"
 
 
-def test_select_matches_narrow_no_match_keeps_all():
-    """좁힐 값이 아무 후보와도 안 맞으면 원본 유지(오탈자/정보 불일치 대비)."""
+def test_select_matches_strict_no_match_becomes_ambiguous():
+    """엄격 모드: 필터 값이 아무 후보와도 안 맞으면 수집하지 않고 확인필요."""
     r = select_matches({"회사명": "세명", "대표자명": "없는사람"}, [
         {"회사명": "세명(주)", "사업자번호": "111-11-11111", "대표자명": "김철수"},
         {"회사명": "세명(주)", "사업자번호": "222-22-22222", "대표자명": "이경환"},
     ], WEIGHTS)
-    assert r.status == "multiple"
-    assert len(r.picks) == 2
+    assert r.status == "ambiguous"
+    assert r.picks == []
+
+
+def test_region_match_city_level():
+    from nice_bizline.app.core.matcher import region_match
+    # 시/군까지만 비교 (도로명 이하 무시)
+    assert region_match("경기도 안양시 동안구 엘에스로 122", "경기 안양시 동안구")
+    assert region_match("경상북도 경주시 유림로 53-12", "경북 경주시")
+    assert region_match("(46273) 부산광역시 연제구 중앙대로 1001", "부산 연제구")
+    assert region_match("서울특별시 관악구 양녕로1길 32", "서울 강남구")   # 광역시는 시/도 일치
+    assert not region_match("경기도 안양시", "경기 수원시")               # 다른 시
+    assert not region_match("경상남도 김해시", "경북 경주시")
 
 
 def test_select_matches_excludes_personal_and_closed_type():

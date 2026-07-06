@@ -134,20 +134,55 @@ def _addr_tokens(addr: str | None) -> set[str]:
     return set(tokens)
 
 
-def _region_tokens(addr: str | None) -> set[str]:
-    """주소 앞부분 지역 토큰(광역/시/구)을 대략 추출. 예: '(42019) 대구 수성구 …' → {'대구','수성구'}."""
+# 시/도 정식 명칭 → 축약 (검색 결과는 '경기 안양시'처럼 축약 표기)
+_PROV_MAP = {
+    "서울특별시": "서울", "서울시": "서울", "부산광역시": "부산", "대구광역시": "대구",
+    "인천광역시": "인천", "광주광역시": "광주", "대전광역시": "대전", "울산광역시": "울산",
+    "세종특별자치시": "세종", "경기도": "경기", "강원도": "강원", "강원특별자치도": "강원",
+    "충청북도": "충북", "충청남도": "충남", "전라북도": "전북", "전북특별자치도": "전북",
+    "전라남도": "전남", "경상북도": "경북", "경상남도": "경남",
+    "제주특별자치도": "제주", "제주도": "제주",
+}
+_PROV_SHORT = set(_PROV_MAP.values())
+
+
+def _region_parts(addr: str | None) -> tuple[str | None, str | None]:
+    """주소 앞부분에서 (시/도, 시/군)을 추출. 예: '경기도 안양시 동안구 …' → ('경기','안양시')."""
     if not addr:
-        return set()
-    s = re.sub(r"\(\d+\)", " ", str(addr))          # 우편번호 제거
+        return (None, None)
+    s = re.sub(r"\(\d{3,6}\)", " ", str(addr))   # 우편번호 제거
     s = re.sub(r"[,()]", " ", s)
-    toks = [t for t in s.split() if t]
-    return set(toks[:2])                             # 앞 2개(시/도 + 시/군/구)
+    prov = city = None
+    for t in s.split()[:3]:
+        n = _PROV_MAP.get(t, t)
+        if n in _PROV_SHORT and prov is None:
+            prov = n
+            continue
+        if city is None and t.endswith(("시", "군")):
+            city = t
+    return (prov, city)
+
+
+def region_match(query_addr: str | None, cand_addr: str | None) -> bool:
+    """주소 앞부분(시/군까지)만 비교. 전체 일치 불요.
+
+    시/군이 양쪽에 있으면 시/군 일치로 판단, 없으면(서울 등 광역) 시/도 일치로 판단.
+    """
+    qp, qc = _region_parts(query_addr)
+    cp, cc = _region_parts(cand_addr)
+    if qc and cc:
+        return qc == cc
+    if qp and cp:
+        return qp == cp
+    return False
 
 
 def _narrow_by_query(query: dict, cands: list[dict],
                      fields: list | set | None = None) -> list[dict]:
-    """동명 후보를 입력의 대표자명/주소로 좁힌다(매치가 있을 때만; 없으면 원본 유지).
+    """동명 후보를 입력의 대표자명/주소로 좁힌다 (엄격 모드).
 
+    입력에 해당 값이 있으면 '일치하는 회사만' 남긴다. 아무도 일치하지 않으면
+    빈 목록을 반환해 확인필요로 분류되게 한다(잘못된 회사 수집 방지).
     fields: 사용할 컬럼 집합. None이면 값이 있는 컬럼 모두 사용.
     """
     if len(cands) <= 1:
@@ -158,16 +193,16 @@ def _narrow_by_query(query: dict, cands: list[dict],
     if use is None or "대표자명" in use:
         q_ceo = (query.get("대표자명") or "").strip()
         if q_ceo:
-            by_ceo = [c for c in out if (c.get("대표자명") or "").strip() == q_ceo]
-            if by_ceo:
-                out = by_ceo
+            def _ceo_ok(c):
+                cc = (c.get("대표자명") or "").strip()
+                # 공동대표('유홍철/지명하') 표기 대비 상호 포함 허용
+                return bool(cc) and (q_ceo in cc or cc in q_ceo)
+            out = [c for c in out if _ceo_ok(c)]
 
-    if (use is None or "주소" in use) and len(out) > 1:
-        q_reg = _region_tokens(query.get("주소"))
-        if q_reg:
-            by_addr = [c for c in out if _region_tokens(c.get("주소")) & q_reg]
-            if by_addr:
-                out = by_addr
+    if (use is None or "주소" in use) and out:
+        q_addr = (query.get("주소") or "").strip()
+        if q_addr:
+            out = [c for c in out if region_match(q_addr, c.get("주소"))]
     return out
 
 
