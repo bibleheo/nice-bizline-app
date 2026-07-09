@@ -99,9 +99,13 @@ def main():
             companies = read_company_list(input_path)
             cols = list(companies[0].keys()) if companies else []
             st.success(f"입력 로드 완료 - {len(companies)}건 (컬럼: {cols})")
-            with st.expander("첫 5건 미리보기"):
-                st.dataframe([{"회사명": c.get("회사명"), "사업자번호": c.get("사업자번호", ""),
-                               "대표자명": c.get("대표자명", "")} for c in companies[:5]])
+            with st.expander("첫 5건 미리보기 (프로그램이 인식한 컬럼 그대로)"):
+                seen: list[str] = []
+                for c in companies[:5]:
+                    for k in c:
+                        if k not in seen:
+                            seen.append(k)
+                st.dataframe([{k: c.get(k, "") for k in seen} for c in companies[:5]])
         except Exception as e:
             st.error(f"엑셀 읽기 실패: {e}")
 
