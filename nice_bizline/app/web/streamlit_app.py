@@ -173,7 +173,8 @@ def _run_collection(cfg, companies, user_id, password, input_path,
     st.session_state.output_bytes = None
 
     progress_bar = st.progress(0, text="시작 중...")
-    log_placeholder = st.empty()
+    log_box = st.container(height=360)          # 스크롤 가능한 로그 영역
+    log_placeholder = log_box.empty()
     status_placeholder = st.empty()
 
     collector = (MockCollector(cfg) if st.session_state.mock
@@ -198,7 +199,8 @@ def _run_collection(cfg, companies, user_id, password, input_path,
             emoji = {"info": "ℹ️", "warn": "⚠️", "error": "❌"}.get(level, "•")
             ts = now_seoul().strftime("%H:%M:%S")
             logs.append(f"{ts}  {emoji} {event['message']}")
-            log_placeholder.code("\n".join(logs[-25:]), language=None)
+            # 전체 로그 표시 (컨테이너 안에서 스크롤). 렌더 부담을 줄이려 5000줄 한도.
+            log_placeholder.code("\n".join(logs[-5000:]), language=None)
         elif t == "progress":
             cur, total, name = event["current"], event["total"], event["name"]
             pct = cur / max(1, total)
@@ -255,8 +257,19 @@ def _render_results():
         )
 
     if st.session_state.logs:
-        with st.expander("실행 로그 전체 보기", expanded=False):
-            st.code("\n".join(st.session_state.logs), language=None)
+        log_text = "\n".join(st.session_state.logs)
+        with st.expander(f"실행 로그 전체 보기 ({len(st.session_state.logs)}줄)",
+                         expanded=False):
+            with st.container(height=420):      # 스크롤 가능
+                st.code(log_text, language=None)
+        base = (Path(st.session_state.output_name).stem
+                if st.session_state.output_name else "실행로그")
+        st.download_button(
+            "📄 로그 다운로드 (.txt)",
+            data=log_text.encode("utf-8"),
+            file_name=f"{base}_로그.txt",
+            mime="text/plain",
+        )
 
 
 if __name__ == "__main__":

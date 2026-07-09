@@ -30,7 +30,8 @@ from nice_bizline.app.excelio.writer import write_results
 def main() -> None:
     args = [a for a in sys.argv[1:]]
     mock = "--mock" in args
-    args = [a for a in args if a != "--mock"]
+    fresh = "--fresh" in args
+    args = [a for a in args if a not in ("--mock", "--fresh")]
     inp = args[0] if args else str(_ROOT / "examples" / "샘플_입력.xlsx")
 
     cfg = yaml.safe_load((_ROOT / "nice_bizline" / "config.yaml").read_text(encoding="utf-8"))
@@ -42,19 +43,18 @@ def main() -> None:
         print("입력이 비었습니다. 파일을 확인하세요.")
         return
 
-    # 이전 실행이 중단됐다면 이어서 진행 (체크포인트)
+    # 이전 실행이 중단됐다면 자동으로 이어서 진행 (사람 개입 불필요)
     resume = False
     ck = checkpoint.load(inp)
     if ck:
         done_n = len(ck.get("processed_keys", []))
-        ans = input(f"이전 실행 기록 발견({done_n}건 처리됨). "
-                    "이어서 진행할까요? [Y=이어서 / n=처음부터]: ").strip().lower()
-        if ans in ("", "y", "yes"):
-            resume = True
-            print(f"→ 이어서 진행: 이미 처리한 {done_n}건은 건너뜁니다.\n")
-        else:
+        if fresh:
             checkpoint.clear(inp)
-            print("→ 처음부터 새로 시작합니다.\n")
+            print(f"→ --fresh: 이전 기록({done_n}건) 삭제, 처음부터 새로 시작.\n")
+        else:
+            resume = True
+            print(f"→ 이전 기록 발견: 처리된 {done_n}건은 건너뛰고 자동으로 이어서 진행합니다."
+                  " (처음부터 하려면 --fresh 옵션)\n")
 
     # 중복(동명) 필터 컬럼 선택 - 헤더에 있는 것만 제시
     narrow_fields = None

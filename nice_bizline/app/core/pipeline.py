@@ -85,8 +85,6 @@ def run_pipeline(collector, cfg: dict, opts: PipelineOptions,
     total = len(opts.companies)
     stopped = False
     seen_this_run: set = set()
-    relogin_failures = 0          # 연속 재로그인 실패 횟수
-    _MAX_RELOGIN_FAILURES = 3     # 이만큼 연속 실패하면 안전 정지
     consecutive_errors = 0        # 연속 회사 처리 오류 (인터넷 장기 단절 등)
     _MAX_CONSECUTIVE_ERRORS = 5   # 이만큼 연속 오류면 안전 정지(이어서 재개 가능)
     recent_error_items: list[tuple[str, str]] = []   # 연속 오류의 (key, 회사명)
@@ -124,31 +122,22 @@ def run_pipeline(collector, cfg: dict, opts: PipelineOptions,
                 extended = False
             if extended:
                 session.mark_login()
-                relogin_failures = 0
                 yield _log("info", "세션 연장 (+10분)")
             else:
-                yield _log("info", "세션 연장 버튼 없음 → 재로그인 시도")
-                try:
-                    collector.login(opts.user_id, opts.password)
-                    session.mark_login()
-                    relogin_failures = 0
-                except CollectorError as e:
-                    relogin_failures += 1
+                yield _log("info", "세션 연장 버튼 없음 → 자동 재로그인")
+                ok = yield from _relogin_with_backoff(collector, opts, session)
+                if not ok:
+                    # 이 회사는 처리 안 된 상태로 정지 → 재개 시 여기부터 다시
+                    state.processed_keys.discard(key)
                     yield _log("error",
-                               f"재로그인 실패({relogin_failures}/{_MAX_RELOGIN_FAILURES}): {e}")
-                    _record_error(state, name, f"재로그인 실패: {e}", query)
-                    state.processed_keys.add(key)
-                    if relogin_failures >= _MAX_RELOGIN_FAILURES:
-                        yield _log("error",
-                                   "세션 갱신 연속 실패 - 안전 정지합니다. 처리분까지 저장됩니다.")
-                        stopped = True
-                        break
-                    continue
+                               "재로그인이 계속 실패해 안전 정지합니다. 처리분은 저장되며, "
+                               "다음 실행 시 자동으로 이어서 진행됩니다.")
+                    stopped = True
+                    break
 
         errors_before = sum(1 for u in state.unfound if u.get("조회상태") == "오류")
         yield from _process_one(collector, opts, state, session, weights, query, name)
         state.processed_keys.add(key)
-        relogin_failures = 0
 
         # 연속 오류 감지: 인터넷 장기 단절 등이면 안전 정지 후 나중에 이어서
         errors_after = sum(1 for u in state.unfound if u.get("조회상태") == "오류")
@@ -191,6 +180,28 @@ def run_pipeline(collector, cfg: dict, opts: PipelineOptions,
     yield {"type": "done", "state": state}
 
 
+def _relogin_with_backoff(collector, opts, session):
+    """접속이 끊겼을 때 로그인 페이지부터 자동 재로그인 (사람 개입 불필요).
+
+    실패하면 15초→30초→1분→2분→4분→5분×3 간격으로 계속 재시도 (총 약 22분).
+    중복 로그인으로 튕긴 경우 동시접속 팝업 처리(접속 종료)가 login() 안에 포함됨.
+    """
+    import time as _time
+    delays = (15, 30, 60, 120, 240, 300, 300, 300)
+    for i, delay in enumerate(delays, 1):
+        try:
+            collector.login(opts.user_id, opts.password)
+            session.mark_login()
+            if i > 1:
+                yield _log("info", f"자동 재로그인 성공 ({i}번째 시도)")
+            return True
+        except Exception as e:
+            yield _log("warn",
+                       f"재로그인 실패({i}/{len(delays)}): {e} → {delay}초 후 자동 재시도")
+            _time.sleep(delay)
+    return False
+
+
 def _process_one(collector, opts, state, session, weights, query, name):
     """한 회사 수집. 실패 시(세션 만료·강제 로그아웃·인터넷 단절 등)
     로그인 페이지부터 다시 로그인하고 같은 회사를 1회 재시도한다."""
@@ -215,12 +226,10 @@ def _process_one(collector, opts, state, session, weights, query, name):
                 _record_error(state, name, f"예외: {e}", query)
                 return
             yield _log("warn", f"[{name}] 연결 오류 감지({type(e).__name__}) → 처음부터 재로그인 후 재시도")
-        # 복구: 로그인 페이지로 돌아가 재로그인 (동시접속 팝업 처리 포함)
-        try:
-            collector.login(opts.user_id, opts.password)
-            session.mark_login()
-        except Exception as e:
-            _record_error(state, name, f"재로그인 실패: {e}", query)
+        # 복구: 로그인 페이지로 돌아가 자동 재로그인 (동시접속 팝업 처리 + 백오프)
+        ok = yield from _relogin_with_backoff(collector, opts, session)
+        if not ok:
+            _record_error(state, name, "재로그인 반복 실패", query)
             return
 
 
