@@ -86,7 +86,7 @@ def test_login_required_triggers_relogin_retry():
 
     w, summary, logs = _run([{"회사명": "삼성전자"}], collector=FlakyCollector(cfg))
     assert summary["success"] == 1
-    assert any("세션 만료 감지" in m for _, m in logs)
+    assert any("세션 만료/강제 로그아웃 감지" in m for _, m in logs)
 
 
 class ListCollector:
@@ -170,6 +170,49 @@ def test_no_exact_name_match_is_ambiguous():
     assert summary["ambiguous"] == 1
     assert summary["success"] == 0
     assert len(w.state.ambiguous) == 1
+
+
+def test_connection_error_relogin_and_retry():
+    """검색 중 일반 예외(인터넷 단절 등) 발생 시 재로그인 후 같은 회사 재시도."""
+    cfg = _load_cfg()
+
+    class FlakyNetCollector(MockCollector):
+        def __init__(self, cfg):
+            super().__init__(cfg)
+            self.search_calls = 0
+            self.login_calls = 0
+
+        def login(self, user_id, password):
+            self.login_calls += 1
+            super().login(user_id, password)
+
+        def search(self, name):
+            self.search_calls += 1
+            if self.search_calls == 1:
+                raise RuntimeError("net::ERR_INTERNET_DISCONNECTED")
+            return super().search(name)
+
+    col = FlakyNetCollector(cfg)
+    w, summary, logs = _run([{"회사명": "삼성전자"}], collector=col)
+    assert summary["success"] == 1          # 재시도로 결국 성공
+    assert col.login_calls >= 2             # 최초 로그인 + 복구 재로그인
+    assert any("재로그인 후 재시도" in m for _, m in logs)
+
+
+def test_consecutive_errors_safe_stop_and_resumable():
+    """연속 오류 시 안전 정지하고, 해당 회사들은 재개 대상으로 남긴다."""
+    cfg = _load_cfg()
+
+    class DeadCollector(MockCollector):
+        def search(self, name):
+            raise RuntimeError("연결 끊김")
+
+    companies = [{"회사명": f"회사{i}"} for i in range(10)]
+    w, summary, logs = _run(companies, collector=DeadCollector(cfg))
+    assert summary["stopped"] is True
+    assert any("안전 정지" in m for _, m in logs)
+    # 연속 오류로 정지된 회사들은 processed_keys 에서 제거되어 재개 시 재시도
+    assert len(w.state.processed_keys) < len(companies)
 
 
 def test_duplicate_input_logs_and_skips():

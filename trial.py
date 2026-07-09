@@ -20,6 +20,7 @@ _ROOT = Path(__file__).resolve().parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from nice_bizline.app.core import checkpoint
 from nice_bizline.app.core.collector import MockCollector, NiceBizlineCollector
 from nice_bizline.app.core.pipeline import PipelineOptions, run_pipeline
 from nice_bizline.app.excelio.reader import available_filter_fields, read_company_list
@@ -40,6 +41,20 @@ def main() -> None:
     if not companies:
         print("입력이 비었습니다. 파일을 확인하세요.")
         return
+
+    # 이전 실행이 중단됐다면 이어서 진행 (체크포인트)
+    resume = False
+    ck = checkpoint.load(inp)
+    if ck:
+        done_n = len(ck.get("processed_keys", []))
+        ans = input(f"이전 실행 기록 발견({done_n}건 처리됨). "
+                    "이어서 진행할까요? [Y=이어서 / n=처음부터]: ").strip().lower()
+        if ans in ("", "y", "yes"):
+            resume = True
+            print(f"→ 이어서 진행: 이미 처리한 {done_n}건은 건너뜁니다.\n")
+        else:
+            checkpoint.clear(inp)
+            print("→ 처음부터 새로 시작합니다.\n")
 
     # 중복(동명) 필터 컬럼 선택 - 헤더에 있는 것만 제시
     narrow_fields = None
@@ -72,6 +87,7 @@ def main() -> None:
     opts = PipelineOptions(
         user_id=uid, password=pw, companies=companies,
         finance_years=1, input_path=inp, narrow_fields=narrow_fields,
+        resume=resume,
     )
 
     state = None
@@ -101,6 +117,10 @@ def main() -> None:
         print("\n" + "=" * 50)
         print("요약:", state.summary)
         print("결과 저장:", outp)
+        if state.summary.get("stopped"):
+            print("※ 중단됨 - 다음 실행에서 '이어서 진행'을 선택하면 멈춘 지점부터 재개합니다.")
+        else:
+            checkpoint.clear(inp)   # 정상 완료 → 체크포인트 정리
         print("=" * 50)
 
 

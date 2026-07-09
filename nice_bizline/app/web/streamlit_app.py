@@ -23,6 +23,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from nice_bizline.app.core import checkpoint
 from nice_bizline.app.core.collector import MockCollector, NiceBizlineCollector
 from nice_bizline.app.core.pipeline import PipelineOptions, PipelineState, run_pipeline
 from nice_bizline.app.excelio.reader import available_filter_fields, read_company_list
@@ -104,6 +105,16 @@ def main():
         except Exception as e:
             st.error(f"엑셀 읽기 실패: {e}")
 
+    # ─── 이어서 진행 (이전 중단 지점 재개) ───
+    resume = False
+    if input_path and companies:
+        ck = checkpoint.load(input_path)
+        if ck:
+            done_n = len(ck.get("processed_keys", []))
+            resume = st.checkbox(
+                f"이어서 진행 - 이전 실행에서 {done_n}건 처리됨 (해제 시 처음부터)",
+                value=True, disabled=st.session_state.running)
+
     # ─── 중복 필터 컬럼 선택 (헤더에 있는 것만 체크박스로) ───
     narrow_fields: list[str] = []
     if companies:
@@ -145,14 +156,16 @@ def main():
         or (not st.session_state.mock and not (user_id and password))
     )
     if st.button("▶ 조회 시작", type="primary", disabled=start_disabled):
-        _run_collection(cfg, companies, user_id, password, input_path, narrow_fields)
+        _run_collection(cfg, companies, user_id, password, input_path,
+                        narrow_fields, resume)
 
     # ─── 진행/결과 표시 ───
     if st.session_state.done_summary:
         _render_results()
 
 
-def _run_collection(cfg, companies, user_id, password, input_path, narrow_fields=None):
+def _run_collection(cfg, companies, user_id, password, input_path,
+                    narrow_fields=None, resume=False):
     """파이프라인을 동기 실행하며 Streamlit UI를 갱신."""
     st.session_state.running = True
     st.session_state.logs = []
@@ -173,6 +186,7 @@ def _run_collection(cfg, companies, user_id, password, input_path, narrow_fields
         input_path=input_path,
         checkpoint_every=10,
         narrow_fields=narrow_fields or None,
+        resume=resume,
     )
     pstate = PipelineState()
 
@@ -211,6 +225,10 @@ def _run_collection(cfg, companies, user_id, password, input_path, narrow_fields
     with open(tmp_path, "rb") as f:
         st.session_state.output_bytes = f.read()
     st.session_state.output_name = out_name
+
+    # 정상 완료(중단 아님) 시 체크포인트 정리 → 다음 실행은 새로 시작
+    if input_path and not pstate.summary.get("stopped"):
+        checkpoint.clear(input_path)
 
     st.session_state.running = False
     st.rerun()

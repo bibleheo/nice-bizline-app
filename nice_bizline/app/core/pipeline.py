@@ -87,6 +87,9 @@ def run_pipeline(collector, cfg: dict, opts: PipelineOptions,
     seen_this_run: set = set()
     relogin_failures = 0          # 연속 재로그인 실패 횟수
     _MAX_RELOGIN_FAILURES = 3     # 이만큼 연속 실패하면 안전 정지
+    consecutive_errors = 0        # 연속 회사 처리 오류 (인터넷 장기 단절 등)
+    _MAX_CONSECUTIVE_ERRORS = 5   # 이만큼 연속 오류면 안전 정지(이어서 재개 가능)
+    recent_error_items: list[tuple[str, str]] = []   # 연속 오류의 (key, 회사명)
     for i, query in enumerate(opts.companies, 1):
         if stop_check():
             yield _log("warn", "사용자 중단 - 처리분까지 저장합니다.")
@@ -142,9 +145,35 @@ def run_pipeline(collector, cfg: dict, opts: PipelineOptions,
                         break
                     continue
 
+        errors_before = sum(1 for u in state.unfound if u.get("조회상태") == "오류")
         yield from _process_one(collector, opts, state, session, weights, query, name)
         state.processed_keys.add(key)
         relogin_failures = 0
+
+        # 연속 오류 감지: 인터넷 장기 단절 등이면 안전 정지 후 나중에 이어서
+        errors_after = sum(1 for u in state.unfound if u.get("조회상태") == "오류")
+        if errors_after > errors_before:
+            consecutive_errors += 1
+            recent_error_items.append((key, name))
+        else:
+            consecutive_errors = 0
+            recent_error_items.clear()
+        if consecutive_errors >= _MAX_CONSECUTIVE_ERRORS:
+            # 이 오류들은 연결 문제일 가능성이 높으므로, 재개 시 다시 시도되도록
+            # 처리 목록과 오류 기록에서 제거한다.
+            err_names = {n for _, n in recent_error_items}
+            for k, _ in recent_error_items:
+                state.processed_keys.discard(k)
+            state.unfound = [u for u in state.unfound
+                             if not (u.get("조회상태") == "오류" and u.get("회사명") in err_names)]
+            state.records = [r for r in state.records
+                             if not (r.get("조회상태") == "오류" and r.get("회사명") in err_names)]
+            yield _log("error",
+                       f"연속 {consecutive_errors}건 오류 - 연결 문제로 보입니다. "
+                       "안전 정지합니다. 다음 실행에서 '이어서 진행'을 선택하면 "
+                       "이 회사들부터 다시 수집합니다.")
+            stopped = True
+            break
 
         # 주기적 체크포인트
         if opts.input_path and i % max(1, opts.checkpoint_every) == 0:
@@ -163,6 +192,8 @@ def run_pipeline(collector, cfg: dict, opts: PipelineOptions,
 
 
 def _process_one(collector, opts, state, session, weights, query, name):
+    """한 회사 수집. 실패 시(세션 만료·강제 로그아웃·인터넷 단절 등)
+    로그인 페이지부터 다시 로그인하고 같은 회사를 1회 재시도한다."""
     for attempt in (1, 2):
         try:
             yield from _collect(collector, opts, state, weights, query, name)
@@ -171,20 +202,25 @@ def _process_one(collector, opts, state, session, weights, query, name):
             if attempt == 2:
                 _record_error(state, name, "세션 만료 재시도 실패", query)
                 return
-            yield _log("warn", f"[{name}] 세션 만료 감지 → 재로그인 후 재시도")
-            try:
-                collector.login(opts.user_id, opts.password)
-                session.mark_login()
-            except CollectorError as e:
-                _record_error(state, name, f"재로그인 실패: {e}", query)
-                return
+            yield _log("warn", f"[{name}] 세션 만료/강제 로그아웃 감지 → 처음부터 재로그인 후 재시도")
         except CollectorError as e:
-            yield _log("error", f"[{name}] 수집 오류: {e}")
-            _record_error(state, name, str(e), query)
-            return
+            if attempt == 2:
+                yield _log("error", f"[{name}] 수집 오류: {e}")
+                _record_error(state, name, str(e), query)
+                return
+            yield _log("warn", f"[{name}] 수집 오류({e}) → 재로그인 후 재시도")
         except Exception as e:
-            yield _log("error", f"[{name}] 예외: {e}")
-            _record_error(state, name, f"예외: {e}", query)
+            if attempt == 2:
+                yield _log("error", f"[{name}] 예외: {e}")
+                _record_error(state, name, f"예외: {e}", query)
+                return
+            yield _log("warn", f"[{name}] 연결 오류 감지({type(e).__name__}) → 처음부터 재로그인 후 재시도")
+        # 복구: 로그인 페이지로 돌아가 재로그인 (동시접속 팝업 처리 포함)
+        try:
+            collector.login(opts.user_id, opts.password)
+            session.mark_login()
+        except Exception as e:
+            _record_error(state, name, f"재로그인 실패: {e}", query)
             return
 
 
