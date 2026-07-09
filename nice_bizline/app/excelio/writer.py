@@ -198,6 +198,7 @@ def write_results(path: str, records: list[dict], unfound: list[dict],
         ("미발견", summary.get("not_found", 0)),
         ("확인필요", summary.get("ambiguous", 0)),
         ("오류", summary.get("error", 0)),
+        ("결과 필터 제외", summary.get("필터제외", 0)),
     ]
     for r_idx, (k, v) in enumerate(rows, 2):
         ws4.cell(r_idx, 1, k)

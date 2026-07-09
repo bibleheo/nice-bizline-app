@@ -59,6 +59,29 @@ class TestReader:
         assert rows[0]["회사명"] == "한빛엔지니어링"
         assert rows[0]["주소"] == "서울특별시 강남구 테헤란로 1"
 
+    def test_gogaeksa_alias(self, tmp_path):
+        """'고객사' 헤더도 회사명으로 인식."""
+        p = tmp_path / "in.xlsx"
+        _make_input(p, [
+            ["고객사", "연락처", "주소"],
+            ["현대모비스(주)", "041-599-9812", "경기도 평택시 포승읍"],
+        ])
+        rows = read_company_list(str(p))
+        assert rows[0]["회사명"] == "현대모비스(주)"
+        assert rows[0]["주소"] == "경기도 평택시 포승읍"
+        assert rows[0]["전화번호"] == "041-599-9812"
+
+    def test_fallback_keeps_other_matched_columns(self, tmp_path):
+        """회사명 헤더만 인식 실패해도 주소 등 다른 컬럼은 보존."""
+        p = tmp_path / "in.xlsx"
+        _make_input(p, [
+            ["알수없는헤더", "주소"],
+            ["가나건설", "서울 강남구"],
+        ])
+        rows = read_company_list(str(p))
+        assert rows[0]["회사명"] == "가나건설"
+        assert rows[0]["주소"] == "서울 강남구"
+
     def test_no_header_falls_back_to_first_column(self, tmp_path):
         """헤더 인식 실패 시 1열을 회사명으로 처리."""
         p = tmp_path / "in.xlsx"

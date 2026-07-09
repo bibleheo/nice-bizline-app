@@ -38,6 +38,9 @@ class PipelineOptions:
     checkpoint_every: int = 10
     # 중복(동명) 필터에 사용할 컬럼. None이면 존재하는 값 모두 사용.
     narrow_fields: list | None = None
+    # 결과 필터: 수집된 값이 조건을 충족하는 회사만 기록.
+    #   {"min_employees": 20, "min_sales": 1000(백만원), "mode": "AND"|"OR"}
+    result_filter: dict | None = None
 
 
 def run_pipeline(collector, cfg: dict, opts: PipelineOptions,
@@ -292,6 +295,13 @@ def _collect(collector, opts, state, weights, query, name):
             notes.append("상세 미진입(기본정보만)")
         if missing:
             notes.append(f"권한없음/미제공: {', '.join(missing)}")
+        # 결과 필터: 조건 미충족 회사는 기록하지 않음
+        passed, why = _passes_result_filter(rec, opts.result_filter)
+        if not passed:
+            state.summary["필터제외"] = state.summary.get("필터제외", 0) + 1
+            yield _log("info", f"[{rec.get('회사명', name)}] 결과 필터 제외 ({why})")
+            continue
+
         rec["비고"] = " / ".join(notes)
         new_records.append(rec)
 
@@ -335,6 +345,34 @@ def _log(level: str, message: str) -> dict:
 
 def _key_for(query: dict) -> str:
     return f"{query.get('회사명', '')}|{query.get('사업자번호', '')}"
+
+
+def _passes_result_filter(rec: dict, f: dict | None) -> tuple[bool, str]:
+    """수집된 값이 결과 필터를 충족하는지 검사.
+
+    조건: min_employees(명), min_sales(백만원). 값이 없으면 미충족으로 간주.
+    mode: "AND"=모든 조건 충족해야 수집, "OR"=하나만 충족해도 수집.
+    반환: (통과 여부, 미충족 사유)
+    """
+    if not f:
+        return True, ""
+    checks: list[tuple[bool, str]] = []
+    if f.get("min_employees") is not None:
+        emp = rec.get("종업원수")
+        ok = isinstance(emp, (int, float)) and emp >= f["min_employees"]
+        checks.append((ok, f"종업원수 {emp if emp is not None else '없음'}"))
+    if f.get("min_sales") is not None:
+        sales = rec.get("매출액")
+        ok = isinstance(sales, (int, float)) and sales >= f["min_sales"]
+        checks.append((ok, f"매출액 {f'{sales}백만원' if sales is not None else '없음'}"))
+    if not checks:
+        return True, ""
+    if (f.get("mode") or "AND").upper() == "OR":
+        passed = any(ok for ok, _ in checks)
+    else:
+        passed = all(ok for ok, _ in checks)
+    reason = ", ".join(desc for ok, desc in checks if not ok)
+    return passed, reason
 
 
 def _with_input(rec: dict, query: dict, show: bool) -> dict:

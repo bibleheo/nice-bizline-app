@@ -172,6 +172,41 @@ def test_no_exact_name_match_is_ambiguous():
     assert len(w.state.ambiguous) == 1
 
 
+def test_result_filter_and_mode():
+    """결과 필터: AND 모드에서 종업원수·매출 조건을 모두 충족해야 수집."""
+    cfg = _load_cfg()
+    done = {}
+    # 삼성전자: 종업원 125819, 매출 258900000백만 → 통과
+    # 현대자동차: 종업원 75091, 매출 162663700 → 통과
+    opts = RunOptions(user_id="u", password="p",
+                      companies=[{"회사명": "삼성전자"}, {"회사명": "현대자동차"}],
+                      result_filter={"min_employees": 100000, "min_sales": 1000,
+                                     "mode": "AND"})
+    cb = WorkerCallbacks(on_log=lambda *a: None, on_progress=lambda *a: None,
+                         on_done=done.update)
+    w = Worker(MockCollector(cfg), cfg, opts, cb)
+    w.start(); w.join(timeout=10)
+    # 현대차는 종업원 75091 < 100000 → AND 미충족 제외
+    assert done["success"] == 1
+    assert done.get("필터제외") == 1
+    assert len(w.state.records) == 1
+
+
+def test_result_filter_or_mode():
+    """OR 모드: 하나만 충족해도 수집."""
+    cfg = _load_cfg()
+    done = {}
+    opts = RunOptions(user_id="u", password="p",
+                      companies=[{"회사명": "현대자동차"}],
+                      result_filter={"min_employees": 100000, "min_sales": 1000,
+                                     "mode": "OR"})
+    cb = WorkerCallbacks(on_log=lambda *a: None, on_progress=lambda *a: None,
+                         on_done=done.update)
+    w = Worker(MockCollector(cfg), cfg, opts, cb)
+    w.start(); w.join(timeout=10)
+    assert done["success"] == 1   # 매출 조건 충족 → OR 통과
+
+
 def test_connection_error_relogin_and_retry():
     """검색 중 일반 예외(인터넷 단절 등) 발생 시 재로그인 후 같은 회사 재시도."""
     cfg = _load_cfg()

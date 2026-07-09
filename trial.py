@@ -32,6 +32,28 @@ def main() -> None:
     mock = "--mock" in args
     fresh = "--fresh" in args
     args = [a for a in args if a not in ("--mock", "--fresh")]
+
+    # 결과 필터 옵션: --min-employees 20  --min-sales 10(억원)  --filter-mode or
+    def _take_opt(name):
+        if name in args:
+            i = args.index(name)
+            val = args[i + 1] if i + 1 < len(args) else None
+            del args[i:i + 2]
+            return val
+        return None
+
+    min_emp = _take_opt("--min-employees")
+    min_sales_eok = _take_opt("--min-sales")
+    fmode = (_take_opt("--filter-mode") or "and").upper()
+    result_filter = None
+    if min_emp or min_sales_eok:
+        result_filter = {"mode": "OR" if fmode == "OR" else "AND"}
+        if min_emp:
+            result_filter["min_employees"] = int(min_emp)
+        if min_sales_eok:
+            result_filter["min_sales"] = int(min_sales_eok) * 100   # 억원 → 백만원
+        print(f"결과 필터: {result_filter}")
+
     inp = args[0] if args else str(_ROOT / "examples" / "샘플_입력.xlsx")
 
     cfg = yaml.safe_load((_ROOT / "nice_bizline" / "config.yaml").read_text(encoding="utf-8"))
@@ -87,7 +109,7 @@ def main() -> None:
     opts = PipelineOptions(
         user_id=uid, password=pw, companies=companies,
         finance_years=1, input_path=inp, narrow_fields=narrow_fields,
-        resume=resume,
+        resume=resume, result_filter=result_filter,
     )
 
     state = None

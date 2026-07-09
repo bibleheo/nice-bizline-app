@@ -132,8 +132,39 @@ def main():
             st.caption("이 파일에는 중복 필터에 쓸 컬럼(대표자명/주소)이 없어, "
                        "동명 회사는 모두 수집됩니다.")
 
+    # ─── 결과 필터: 수집값 조건에 맞는 회사만 기록 ───
+    result_filter = None
+    if companies:
+        st.subheader("③ 결과 필터 (선택)")
+        st.caption("나이스비즈라인에서 수집한 값이 조건에 맞는 회사만 결과에 남깁니다. "
+                   "값이 없는 회사도 제외됩니다.")
+        c1, c2 = st.columns(2)
+        with c1:
+            use_emp = st.checkbox("종업원수 조건", value=False,
+                                  disabled=st.session_state.running)
+            min_emp = st.number_input("최소 종업원수(명)", min_value=1, value=20,
+                                      disabled=st.session_state.running or not use_emp)
+        with c2:
+            use_sales = st.checkbox("매출액 조건", value=False,
+                                    disabled=st.session_state.running)
+            min_sales_eok = st.number_input("최소 매출액(억원)", min_value=1, value=10,
+                                            disabled=st.session_state.running or not use_sales)
+        mode = "AND"
+        if use_emp and use_sales:
+            mode_label = st.radio(
+                "두 조건 결합 방식",
+                ["AND - 둘 다 충족해야 수집", "OR - 하나만 충족해도 수집"],
+                horizontal=True, disabled=st.session_state.running)
+            mode = "OR" if mode_label.startswith("OR") else "AND"
+        if use_emp or use_sales:
+            result_filter = {"mode": mode}
+            if use_emp:
+                result_filter["min_employees"] = int(min_emp)
+            if use_sales:
+                result_filter["min_sales"] = int(min_sales_eok) * 100   # 억원 → 백만원
+
     # ─── 계정 (모의 모드는 스킵) ───
-    st.subheader("③ 계정")
+    st.subheader("④ 계정")
     col1, col2 = st.columns(2)
     with col1:
         user_id = st.text_input(
@@ -149,7 +180,7 @@ def main():
         )
 
     # ─── 시작 버튼 ───
-    st.subheader("④ 실행")
+    st.subheader("⑤ 실행")
     start_disabled = (
         st.session_state.running
         or not companies
@@ -157,7 +188,7 @@ def main():
     )
     if st.button("▶ 조회 시작", type="primary", disabled=start_disabled):
         _run_collection(cfg, companies, user_id, password, input_path,
-                        narrow_fields, resume)
+                        narrow_fields, resume, result_filter)
 
     # ─── 진행/결과 표시 ───
     if st.session_state.done_summary:
@@ -165,7 +196,7 @@ def main():
 
 
 def _run_collection(cfg, companies, user_id, password, input_path,
-                    narrow_fields=None, resume=False):
+                    narrow_fields=None, resume=False, result_filter=None):
     """파이프라인을 동기 실행하며 Streamlit UI를 갱신."""
     st.session_state.running = True
     st.session_state.logs = []
@@ -188,6 +219,7 @@ def _run_collection(cfg, companies, user_id, password, input_path,
         checkpoint_every=10,
         narrow_fields=narrow_fields or None,
         resume=resume,
+        result_filter=result_filter,
     )
     pstate = PipelineState()
 
@@ -240,12 +272,13 @@ def _render_results():
     s = st.session_state.done_summary
     st.subheader("④ 결과")
 
-    cols = st.columns(5)
+    cols = st.columns(6)
     cols[0].metric("전체", s.get("total", 0))
     cols[1].metric("성공", s.get("success", 0))
     cols[2].metric("미발견", s.get("not_found", 0))
     cols[3].metric("확인필요", s.get("ambiguous", 0))
     cols[4].metric("오류", s.get("error", 0))
+    cols[5].metric("필터 제외", s.get("필터제외", 0))
 
     if st.session_state.output_bytes:
         st.download_button(
