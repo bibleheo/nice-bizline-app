@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+
+# App artifacts
+*.progress.json
+logs/
+*_나이스비즈라인결과_*.xlsx
+*_나이스비즈라인로그_*.log
+*_결과.xlsx
