@@ -139,29 +139,38 @@ class TestWriterInputColumns:
         assert ws.cell(3, name_col).value == "동명건설(주)"
 
 
-class TestClosureHighlight:
-    def test_closed_business_cell_highlighted(self, tmp_path):
-        """휴폐업정보가 폐업/휴업이면 셀 배경 강조, 정상(일반과세자)은 무색."""
+class TestResultSheetFiltering:
+    def test_closed_and_unfound_rows_excluded_from_results(self, tmp_path):
+        """결과 시트에는 성공(정상)만: 폐업자/휴업자·미발견·확인필요 제외.
+
+        휴폐업 제외분은 미발견·오류 시트에 '제외' 사유로 남긴다.
+        """
         p = tmp_path / "out.xlsx"
         write_results(
             str(p),
             records=[
                 {"회사명": "정상사", "휴폐업정보": "일반과세자", "조회상태": "성공"},
-                {"회사명": "폐업사", "휴폐업정보": "폐업", "조회상태": "성공"},
-                {"회사명": "휴업사", "휴폐업정보": "휴업", "조회상태": "성공"},
+                {"회사명": "폐업사", "휴폐업정보": "폐업자", "조회상태": "성공"},
+                {"회사명": "휴업사", "휴폐업정보": "휴업자", "조회상태": "성공"},
+                {"회사명": "못찾은사", "조회상태": "미발견"},
+                {"회사명": "애매한사", "조회상태": "확인필요"},
             ],
-            unfound=[], ambiguous=[], summary={},
+            unfound=[{"회사명": "못찾은사", "조회상태": "미발견", "사유": "검색 0건"}],
+            ambiguous=[], summary={},
         )
         wb = openpyxl.load_workbook(p)
         ws = wb["결과"]
         headers = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
-        col = headers.index("휴폐업정보") + 1
-        normal = ws.cell(2, col).fill.start_color.rgb
-        closed = ws.cell(3, col).fill.start_color.rgb
-        paused = ws.cell(4, col).fill.start_color.rgb
-        assert str(closed).endswith("F4CCCC")
-        assert str(paused).endswith("FCE5CD")
-        assert not str(normal).endswith(("F4CCCC", "FCE5CD"))
+        name_col = headers.index("회사명") + 1
+        names = [ws.cell(r, name_col).value for r in range(2, ws.max_row + 1)]
+        assert names == ["정상사"]          # 결과 시트엔 정상만
+        # 휴폐업 제외분은 미발견·오류 시트에 '제외'로 기록
+        ws2 = wb["미발견·오류"]
+        rows2 = [tuple(ws2.cell(r, c).value for c in (1, 2))
+                 for r in range(2, ws2.max_row + 1)]
+        assert ("폐업사", "제외") in rows2
+        assert ("휴업사", "제외") in rows2
+        assert ("못찾은사", "미발견") in rows2
 
 
 class TestWriter:

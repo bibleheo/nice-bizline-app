@@ -117,6 +117,22 @@ def write_results(path: str, records: list[dict], unfound: list[dict],
                   ambiguous: list[dict], summary: dict,
                   finance_years: int = 1) -> None:
     wb = openpyxl.Workbook()
+    # 결과 시트는 '바로 쓸 수 있는 목록'만: 미발견/확인필요(전용 시트에 있음)와
+    # 폐업자/휴업자(영업 대상 아님)는 제외한다. 휴폐업 제외분은 미발견·오류
+    # 시트에 사유와 함께 남겨 추적 가능하게 한다.
+    visible: list[dict] = []
+    excluded_closed: list[dict] = []
+    for rec in records:
+        status = str(rec.get("조회상태") or "")
+        if status in ("미발견", "확인필요"):
+            continue
+        hp = str(rec.get("휴폐업정보") or "")
+        if ("폐업" in hp) or ("휴업" in hp):
+            excluded_closed.append(rec)
+            continue
+        visible.append(rec)
+    records = visible
+
     # 좌측 = 원본 입력 열([입력] 접두), 우측 = 수집 결과 열
     in_cols = _input_columns(records)
     in_headers = [f"[입력] {c}" for c in in_cols]
@@ -161,13 +177,18 @@ def write_results(path: str, records: list[dict], unfound: list[dict],
                     cell.font = Font(size=10, bold=True, color="9B0000")
                     cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    # 시트2: 미발견·오류
+    # 시트2: 미발견·오류 (+ 휴폐업 제외분)
     ws2 = wb.create_sheet("미발견·오류")
     for col, h in enumerate(["회사명", "조회상태", "사유"], 1):
         _header(ws2.cell(1, col), h)
     for i, w in enumerate([22, 12, 50], 1):
         ws2.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
-    for r_idx, item in enumerate(unfound, 2):
+    unfound_rows = list(unfound) + [
+        {"회사명": rec.get("회사명", ""), "조회상태": "제외",
+         "사유": f"휴폐업정보: {rec.get('휴폐업정보', '')}"}
+        for rec in excluded_closed
+    ]
+    for r_idx, item in enumerate(unfound_rows, 2):
         ws2.cell(r_idx, 1, item.get("회사명", ""))
         ws2.cell(r_idx, 2, item.get("조회상태", ""))
         ws2.cell(r_idx, 3, item.get("사유", ""))
@@ -199,6 +220,7 @@ def write_results(path: str, records: list[dict], unfound: list[dict],
         ("확인필요", summary.get("ambiguous", 0)),
         ("오류", summary.get("error", 0)),
         ("결과 필터 제외", summary.get("필터제외", 0)),
+        ("휴폐업 제외", len(excluded_closed)),
     ]
     for r_idx, (k, v) in enumerate(rows, 2):
         ws4.cell(r_idx, 1, k)
